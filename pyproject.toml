@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "deepdive-ai"
 version = "0.1.0"
-description = "Self-verifying research analyst foundation"
+description = "Self-verifying research foundation with bounded Mesh and public HTTP adapters"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "DeepDive AI" }]
