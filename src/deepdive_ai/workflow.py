@@ -10,6 +10,7 @@ from .models import (
     Claim, Report, ResearchBundle, ResearchQuestion, ResearchTask,
     VerificationResult, VerificationStatus, nonempty, records, validate_verification,
 )
+from .reporting import render_verified_summary
 
 
 @dataclass(frozen=True)
@@ -17,8 +18,11 @@ class WorkflowPolicy:
     max_research_retries: int = 1
     max_tasks: int = 20
     max_claims: int = 100
+    require_verified_summary: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.require_verified_summary) is not bool:
+            raise ValueError("require_verified_summary must be a boolean")
         if type(self.max_research_retries) is not int or not 0 <= self.max_research_retries <= 5:
             raise ValueError("max_research_retries must be between 0 and 5")
         for value in (self.max_tasks, self.max_claims):
@@ -92,6 +96,8 @@ class WorkflowCoordinator:
                 or report.claims != claims or report.verification != results
             ):
                 raise ValueError("synthesizer must preserve supplied research and verification")
+            if self.policy.require_verified_summary and report.summary != render_verified_summary(bundle, claims, results):
+                raise ValueError("synthesizer must preserve exact verified claim text and citations in the summary")
             emit(AuditKind.COMPLETED)
             return report
         except Exception:

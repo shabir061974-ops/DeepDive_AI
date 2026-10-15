@@ -167,6 +167,13 @@ class Report:
     verification: tuple[VerificationResult, ...]
     status: ReportStatus
 
+    @property
+    def accepted_claims(self) -> tuple[Claim, ...]:
+        """Final research claims; the full claims/verification fields remain the audit ledger."""
+        supported = {result.claim_id for result in self.verification
+                     if result.status == VerificationStatus.SUPPORTED}
+        return tuple(claim for claim in self.claims if claim.id in supported)
+
     def __post_init__(self) -> None:
         if not isinstance(self.question, ResearchQuestion) or not isinstance(self.bundle, ResearchBundle):
             raise ValueError("report requires a question and research bundle")
