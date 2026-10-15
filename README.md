@@ -2,15 +2,16 @@
 
 Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
-## Phase 3 status
+## Phase 4 status
 
 This Python 3.12 project includes validated immutable domain models, five async
 agent interfaces and concrete implementations, an injectable workflow coordinator,
 audit events, a bounded Mesh HTTP client and a public-source HTTP retrieval adapter.
-The five-agent workflow is callable through explicit dependency injection and has
-been verified using offline fixtures. Live research has not been validated.
+The five-agent workflow now includes an explicit Brave Web Search adapter and
+bounded static HTML/PDF extraction, verified using mocked HTTP and local fixtures.
+Live search, Mesh compatibility and live research have not been validated.
 
-Phase 3 starts at commit `440eba4`, verified clean before implementation. Phase 1
+Phase 4 starts at commit `5e2d54e`, verified clean before implementation. Phase 1
 and Phase 2 remain the architectural foundation. No live Mesh calls, web retrieval, paid API
 usage, service activation, push or deployment occurred during implementation or
 testing. Mesh protocol compatibility has not been verified against a live service
@@ -45,6 +46,12 @@ ResearchQuestion
   limits, shared external-call budgets, operation timeouts and sanitized failures.
 - `src/deepdive_ai/discovery.py`: typed, injectable source-discovery interface.
   Discovery candidates are URL records, not evidence or fabricated provenance.
+- `src/deepdive_ai/search.py`: explicit Brave Web Search adapter using the existing
+  protected HTTP transport, bounded requests, strict results and URL deduplication.
+- `src/deepdive_ai/extraction.py`: bounded readable HTML extraction, PDF worker
+  orchestration and transformed-text artifacts.
+- `src/deepdive_ai/pdf_worker.py`, `process_limits.py`: isolated PDF parsing with
+  page/stream/structure/text limits and OS memory/CPU limits.
 - `src/deepdive_ai/runtime.py`: `build_research_workflow(...)` composes the concrete
   agents with the existing coordinator. It creates no network requests and starts
   no services. A Mesh client, model, discovery provider, retriever and audit sink
@@ -71,7 +78,7 @@ ResearchQuestion
   reporting `{"status": "ok", "phase": "foundation"}`. This is process health,
   not research readiness. No research HTTP endpoint is exposed. The Phase 1 health
   payload, greeting behavior and agent protocol signatures remain unchanged.
-  Phase 1/2 validation and bounded retries remain intact. All 68 earlier tests
+  Phase 1/2 validation and bounded retries remain intact. All 104 earlier tests
   continue to run unchanged. Disabled Phase 1 adapters remain available and disabled.
 
 ## Concrete research agents
@@ -107,13 +114,14 @@ Missing citations yield insufficient evidence without calling Mesh. Unknown IDs,
 fabricated quotes, missing assessments, malformed JSON or API failures abort the
 run with a failure audit event, rather than manufacturing verification results.
 
-Research evidence consists of exact UTF-8 byte slices, with locators, source IDs,
-original content hashes and retrieval timestamps. Retries retain all prior source
+Plain UTF-8 text/CSV/JSON evidence retains exact original-byte locators. HTML/PDF
+evidence uses explicit transformed-text locators and extraction provenance, never
+original-byte offsets. Source IDs, original content hashes and timestamps remain
+unchanged by extraction. Retries retain all prior source
 and evidence records; changed source content becomes a new snapshot. Identical
-URL/content snapshots retain their first timestamp. Extraction takes a bounded
-prefix in consecutive byte chunks and preserves UTF-8 boundaries. It supports raw
-UTF-8 plain text, CSV, JSON, HTML and XHTML. HTML is unrendered, untrusted source
-markup; scripts are never executed. PDF and invalid/non-UTF-8 text abort safely.
+URL/content snapshots retain their first timestamp. Evidence selection takes a
+bounded prefix in UTF-8-safe chunks after extraction. HTML/PDF handling is described
+below; scripts are never executed, and unsupported or ambiguous encodings fail.
 This extractor does not claim to scan the entire source or discover all relevant
 facts. Truncated content may omit relevant context or contradictions.
 
@@ -162,6 +170,132 @@ def compose(mesh_client, model_name, discovery_provider, http_retriever, audit_s
         retriever=http_retriever, audit=audit_sink,
     )
 ```
+
+## Brave Web Search provider
+
+`BraveSearchDiscovery` implements the existing `SourceDiscovery` interface. It
+uses a GET to `https://api.search.brave.com/res/v1/web/search`, a
+`X-Subscription-Token` header, and `q`, `count`, `search_lang`, `country` and
+`spellcheck=false` parameters. It expects a JSON `type: "search"` response with
+optional `web.results` URL records. Search snippets/titles never become evidence.
+Missing web results are empty discovery; malformed records or unsafe URLs fail the
+whole request. URLs are normalized and duplicates removed without changing their
+query strings. Fetched redirect aliases also retain a single source record for
+identical final URL/content snapshots.
+
+An account/subscription with Web Search API access and a valid process environment
+variable `BRAVE_SEARCH_API_KEY` are required for future authorized live use.
+`BraveSearchSettings.from_environment()` rejects missing or invalid credentials.
+Country/language and `RequestPolicy` are configured in Python. The credential is
+excluded from representations and worker environments; it is never placed in a
+query string. Authenticated search redirects are rejected, including redirects to
+the same host. The endpoint is constrained to the approved HTTPS origin/path.
+Public DNS/IP validation, IP pinning, TLS verification, proxy exclusion, timeout,
+size and retry protections use the unchanged Phase 2 transport. Discovery URLs
+undergo syntax/IP checks; public DNS checks occur before each actual source fetch.
+
+Default search limits: 10-second attempt timeout, one retry, 256,000 response bytes,
+32 lifetime HTTP attempts, two concurrent awaited requests. Queries must fit 400
+characters and 50 whitespace-delimited words; overlong queries are rejected rather
+than silently truncated. SearchRequest accepts 1–20 results. Provider responses
+exceeding the requested count fail. English (`en`) and country `ALL` are defaults;
+other language/country codes must be accepted by the provider. No pagination,
+automatic provider fallback, query rewriting or hard requests-per-second scheduler
+is implemented. Agent-generated task queries must also fit these provider limits.
+
+Pricing assumption: **no free tier, credit allowance or numeric price is assumed**.
+Plan availability, quotas, attribution/storage rights and costs require review in
+the [Brave API dashboard](https://api-dashboard.search.brave.com/) and
+[provider plan information](https://brave.com/search/api/) before activation.
+Each HTTP retry may count as another billable request. Budgets bound request
+counts, not currency spend; set `max_retries=0` for strict single-attempt behavior.
+This declared API contract is tested with mocked responses only, not a live
+provider or live account. No subscription was created or service activated.
+
+## HTML/PDF extraction and provenance
+
+`BoundedContentExtractor` is the researcher's default extractor for HTML, XHTML and
+PDF. It can be explicitly injected through `build_research_workflow(extractor=...)`.
+The other four agents and verification requirements are unchanged. Original HTTP
+entity-body bytes remain the input to source hashing; extracted text never replaces
+the source digest.
+
+HTML parsing uses the standard library without fetching resources or executing
+scripts. It removes script/style/head, navigation, headers/footers, sidebars,
+forms, hidden elements and common cookie/advert/social boilerplate; prefers static
+`main`/`article` content; decodes entities; and normalizes block whitespace. Limits
+cover input bytes (2,000,000), retained text characters (100,000), parser nodes
+(50,000) and nesting (128). Malformed nesting, unclosed nonoptional elements,
+external/unsafe declarations, no parsed elements or no meaningful text fail closed.
+Common optional HTML closing tags are accepted. UTF-8 is the default; HTTP charset,
+BOM and early meta charset declarations support a strict allowlist of UTF-8,
+Windows-1252, ISO-8859-1 and BOM-marked UTF-16. Conflicting, unsupported or invalid
+encodings are rejected, without replacement decoding. Charset metadata is retained
+by the HTTP adapter; ambiguous duplicate charset parameters are rejected.
+
+HTML removal is heuristic, not a browser layout engine: complex CSS, dynamic/JS
+pages, unusual boilerplate, code, tables and meaningful content inside removed
+elements can be missed or flattened. Limits fail rather than truncate the parsed
+artifact. CPU work is bounded by byte/node/depth limits; the hard worker wall-clock
+and OS memory/CPU limits below apply to PDF, not in-process HTML parsing.
+
+PDF parsing uses the pinned `pypdf==6.20.1` in a separate isolated Python process.
+Defaults: 2,000,000 input bytes, 20 pages, 20,000 text characters per page,
+100,000 total text characters, 8,000,000 decoded content-stream bytes, 50,000 graph
+nodes, depth 128, 256 MiB memory, five CPU seconds and a ten-second wall timeout.
+One worker runs at a time per extractor. On Windows, a Job Object caps combined
+job/process memory and CPU, allows the venv launcher/interpreter pair, and kills
+the entire job on timeout/cancellation/cleanup. POSIX workers apply address-space,
+CPU and core-dump limits before parsing. If required resource limits cannot be
+established, extraction fails. Worker stdin/stdout are bounded by input/output
+policies; diagnostics are suppressed, source bytes are not written to temporary
+files, credentials are not inherited, and worker socket access is disabled.
+
+Encrypted PDFs (including empty-password encryption), malformed signatures/trailers,
+invalid structures, active actions/JavaScript, embedded files, external streams,
+oversized/decompression-heavy documents and documents with no extractable text are
+rejected. Conservative active-action rejection also excludes some PDFs containing
+ordinary link annotations. No OCR, rendering, passwords or external fonts/resources
+are fetched. Image-only scans cannot yield evidence. PDF reading order, column,
+table and glyph reconstruction remain parser limitations. Process resource
+isolation is not a complete OS security sandbox against parser vulnerabilities.
+
+`Evidence.extraction` records the original byte digest, extracted artifact digest,
+excerpt digest, versioned extraction method, transformations, extracted Unicode
+character span and optional 1-based PDF page. HTML has one text artifact; PDF has
+one per text-bearing page. Locators explicitly say `extracted text chars`, never
+original HTTP bytes. The model validates excerpt span length/digest and binds the
+original digest to the evidence's actual source record. Final supporting citations
+retain this metadata. Original-byte locators remain available only for unchanged
+plain UTF-8 evidence. Reproducing a full extraction artifact requires the original
+document plus recorded method/transformations; artifacts are not persistently
+archived in this phase. Bounded evidence selection can still omit later text or
+pages and must not be interpreted as complete-document verification.
+
+Configuration example (definition only; constructing clients makes no requests):
+
+```python
+from deepdive_ai.extraction import BoundedContentExtractor, ExtractionSettings
+from deepdive_ai.http_transport import RequestPolicy
+from deepdive_ai.retrieval import HTTPWebRetriever
+from deepdive_ai.search import BraveSearchDiscovery, BraveSearchSettings
+from deepdive_ai.runtime import build_research_workflow
+
+def compose_web_research(mesh_client, model_name, audit_sink):
+    discovery = BraveSearchDiscovery(BraveSearchSettings.from_environment(
+        policy=RequestPolicy(timeout_seconds=10, max_retries=0, max_requests=10)))
+    extractor = BoundedContentExtractor(ExtractionSettings(max_pages=10))
+    return build_research_workflow(
+        mesh=mesh_client, model=model_name, discovery=discovery,
+        retriever=HTTPWebRetriever(), extractor=extractor, audit=audit_sink,
+    )
+```
+
+Credentials are process environment variables, `MESH_API_KEY` and
+`BRAVE_SEARCH_API_KEY`. `.env` files are ignored and not automatically loaded.
+Never log settings with `dataclasses.asdict()`, which would include credentials.
+Calling a workflow later would perform external operations; this example does not
+invoke it. No default provider is silently activated at import or server startup.
 
 ## Mesh adapter
 
@@ -244,10 +378,9 @@ only an exact, valid UTF-8 slice with a byte-range locator. It does not render H
 extract PDF text, execute scripts or infer findings. Sources remain untrusted.
 
 The Phase 2 fetch adapter's `search()` still explicitly raises `RetrievalError`;
-it is not a search engine. Phase 3 requires a separate `SourceDiscovery` provider
-implementing `discover(SearchRequest) -> tuple[DiscoveredSource, ...]`. A provider
-must return genuine search/index results and respect the requested limit. No live
-search provider or provider credentials are bundled, guessed or activated.
+it is not a search engine. Phase 4 supplies the separate Brave implementation of
+`SourceDiscovery`; credentials and activation remain explicit. No credentials are
+bundled or guessed.
 Both clients accept an injected `HTTPTransport`; tests inject scripted responses
 or fake sockets, clocks and delays. Injected transports are trusted implementations
 and must uphold the transport contract; the default enforces DNS and socket policy.
@@ -285,18 +418,19 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-The core and offline tests require only the standard library. For the optional
-FastAPI shell, install the declared backend extra:
+The core now requires the pinned PDF dependency, installed by `pip install -e .`.
+For the optional FastAPI shell, install the declared backend extra:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e '.[backend]'
 ```
 
 The supplied environment has FastAPI installed, and the health-endpoint test runs.
-On environments without FastAPI that optional test explicitly skips. The adapters
-use Python 3.12's standard library (`http.client`, `ssl`, `socket`, `asyncio`), so
-Phases 2 and 3 add no third-party runtime dependencies. Backend dependencies remain in
-the existing optional extra. No dependency downloads were needed for this phase.
+On environments without FastAPI that optional test explicitly skips. HTTP, search
+and HTML parsing use the Python 3.12 standard library. Phase 4 adds the pinned
+`pypdf==6.20.1` dependency, installed into this repository's `.venv` for verification.
+Backend dependencies remain in the existing optional extra. No live search,
+retrieval or Mesh calls were used to install or test the implementation.
 No credential is needed for tests. Supply `MESH_API_KEY` through the process
 environment for future authorized Mesh use; never commit it. `.env` files are
 ignored and are not automatically loaded.
@@ -325,11 +459,17 @@ counter-evidence, unknown citations, invented quotes, malformed output, sanitize
 API errors, successful/exhausted retries, provenance preservation, summary tampering
 and shared resource budgets. Fixture assertions are not real research findings.
 
+Phase 4 adds mocked Brave results and authored local HTML/PDF fixtures for provider
+errors/limits/duplication, charset handling, cleaned text, transformed span/hash
+integrity, actual resource-limited PDF extraction, encrypted/active/malformed PDF
+rejection, resource exhaustion, unsafe redirects and end-to-end researcher
+integration. The original 104 tests remain unchanged.
+
 ## Remaining limitations
 
 Official Mesh wire-format/model confirmation and explicitly authorized live
-integration tests; a real discovery-provider implementation; rendered HTML/PDF
-extraction and relevance selection beyond bounded byte prefixes; independent
+integration tests; additional discovery providers and search quality evaluation;
+browser-rendered HTML, OCR and better PDF layout/relevance selection; independent
 semantic accuracy evaluation, source-quality assessment and completeness checking;
 persistent evidence/audit storage; research endpoints, authentication and UI;
 deployment. Prompts separate untrusted data and forbid embedded instructions, and
@@ -337,4 +477,4 @@ strict schemas/citation/quote checks constrain output, but prompt injection and
 semantic misclassification remain model risks. No live source or model accuracy
 claim is made. The workflow is not started by the greeting or health endpoint.
 
-Phase 3 changes remain uncommitted pending SPA review. No Phase 4 work is included.
+Phase 4 changes remain uncommitted pending SPA review. No later-phase work is included.

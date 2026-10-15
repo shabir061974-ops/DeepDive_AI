@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+import hashlib
 from urllib.parse import urlsplit
 
 
@@ -86,16 +87,57 @@ class Source:
 
 
 @dataclass(frozen=True)
+class ExtractionProvenance:
+    """Offsets refer to a transformed text artifact, never original HTTP bytes."""
+
+    original_content_sha256: str
+    extracted_text_sha256: str
+    excerpt_sha256: str
+    method: str
+    transformations: tuple[str, ...]
+    text_start: int
+    text_end: int
+    page_number: int | None = None
+
+    def __post_init__(self) -> None:
+        for digest in (self.original_content_sha256, self.extracted_text_sha256, self.excerpt_sha256):
+            if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+                raise ValueError("Extraction digest must be lowercase SHA-256")
+        nonempty(self.method, "extraction method")
+        identifiers(self.transformations, "extraction transformations")
+        if not self.transformations:
+            raise ValueError("Extraction must record its transformations")
+        if type(self.text_start) is not int or type(self.text_end) is not int or not 0 <= self.text_start < self.text_end:
+            raise ValueError("Invalid extracted-text span")
+        if self.page_number is not None and (type(self.page_number) is not int or self.page_number < 1):
+            raise ValueError("Invalid PDF page number")
+
+
+@dataclass(frozen=True)
 class Evidence:
     id: str
     source_id: str
     task_id: str
     excerpt: str
     locator: str
+    extraction: ExtractionProvenance | None = None
 
     def __post_init__(self) -> None:
         for name in ("id", "source_id", "task_id", "excerpt", "locator"):
             nonempty(getattr(self, name), name)
+        if self.extraction is not None:
+            if not isinstance(self.extraction, ExtractionProvenance):
+                raise ValueError("Invalid extraction provenance")
+            if len(self.excerpt) != self.extraction.text_end - self.extraction.text_start:
+                raise ValueError("Excerpt length does not match extracted-text span")
+            try:
+                excerpt_digest = hashlib.sha256(self.excerpt.encode("utf-8")).hexdigest()
+            except UnicodeError:
+                raise ValueError("Transformed evidence must contain valid Unicode") from None
+            if excerpt_digest != self.extraction.excerpt_sha256:
+                raise ValueError("Excerpt digest does not match extraction provenance")
+            if "bytes" in self.locator.lower():
+                raise ValueError("Transformed evidence cannot claim original byte offsets")
 
 
 @dataclass(frozen=True)
@@ -149,6 +191,10 @@ class ResearchBundle:
         known = {source.id for source in self.sources}
         if any(item.source_id not in known for item in self.evidence):
             raise ValueError("evidence references an unknown source")
+        by_id = {source.id: source for source in self.sources}
+        for item in self.evidence:
+            if item.extraction is not None and item.extraction.original_content_sha256 != by_id[item.source_id].provenance.content_sha256:
+                raise ValueError("Extraction provenance does not match original source digest")
 
 
 def records(values: tuple, kind: type) -> None:

@@ -1,9 +1,11 @@
 import asyncio
 import hashlib
+import json
 from typing import Protocol
 
 from ..discovery import DiscoveredSource, SourceDiscovery
 from ..http_transport import validate_url
+from ..extraction import BoundedContentExtractor, ContentExtractor, TextArtifact
 from ..models import Evidence, ResearchBundle, ResearchQuestion, ResearchTask, VerificationResult, records
 from ..retrieval import RetrievedDocument, SearchRequest, WebRetriever
 from .common import AgentBudget, AgentError, AgentLimitError, AgentLimits, text
@@ -24,16 +26,58 @@ class ResearcherAgent(Protocol):
 class RetrievalResearcherAgent:
     """Search via an injected provider, then fetch through the Phase 2 interface.
 
-    Evidence is an exact bounded prefix of UTF-8 source bytes, never model prose.
+    Evidence is a bounded text prefix with original-byte or transformed-text locators.
     No provider is silently supplied and direct fetching is never called search.
     """
 
     def __init__(self, discovery: SourceDiscovery, retriever: WebRetriever,
-                 limits: AgentLimits = AgentLimits(), budget: AgentBudget | None = None):
+                 limits: AgentLimits = AgentLimits(), budget: AgentBudget | None = None,
+                 extractor: ContentExtractor | None = None):
         self.discovery = discovery
         self.retriever = retriever
         self.limits = limits
         self.budget = budget if budget is not None else AgentBudget(limits)
+        self.extractor = extractor if extractor is not None else BoundedContentExtractor()
+
+    async def _document_evidence(self, document: RetrievedDocument, task: ResearchTask) -> tuple[Evidence, ...]:
+        if len(document.content) > self.limits.max_document_bytes:
+            raise AgentLimitError("Retrieved document exceeds agent byte limit")
+        if document.media_type not in {"text/html", "application/xhtml+xml", "application/pdf"}:
+            return self._extract(document, task)
+        try:
+            artifacts = await asyncio.wait_for(self.extractor.extract(document), self.limits.operation_timeout_seconds)
+        except Exception:
+            raise AgentError("Source content extraction failed") from None
+        if not isinstance(artifacts, tuple) or not artifacts or any(not isinstance(item, TextArtifact) for item in artifacts):
+            raise AgentError("Content extractor returned invalid artifacts")
+        evidence = []
+        for artifact in artifacts:
+            if artifact.original_content_sha256 != document.source.provenance.content_sha256:
+                raise AgentError("Extraction artifact does not match original source")
+            encoded = artifact.text.encode("utf-8")
+            start = 0
+            char_start = 0
+            while start < len(encoded) and len(evidence) < self.limits.chunks_per_document:
+                end = min(start + self.limits.chunk_bytes, len(encoded))
+                while True:
+                    try:
+                        selected = encoded[start:end].decode("utf-8")
+                        break
+                    except UnicodeDecodeError:
+                        end -= 1
+                char_end = char_start + len(selected)
+                if selected.strip():
+                    digest = hashlib.sha256(encoded).hexdigest()
+                    identity = json.dumps([document.source.id, task.id, artifact.method, artifact.page_number,
+                                           digest, char_start, char_end, artifact.transformations])
+                    evidence_id = "e-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+                    evidence.append(artifact.evidence(evidence_id, document.source.id, task.id, char_start, char_end))
+                start, char_start = end, char_end
+            if len(evidence) >= self.limits.chunks_per_document:
+                break
+        if not evidence:
+            raise AgentError("Content extraction produced no usable evidence")
+        return tuple(evidence)
 
     def _check_bundle(self, bundle: ResearchBundle) -> None:
         if (len(bundle.sources) > self.limits.max_sources or len(bundle.evidence) > self.limits.max_evidence
@@ -43,7 +87,7 @@ class RetrievalResearcherAgent:
     def _extract(self, document: RetrievedDocument, task: ResearchTask) -> tuple[Evidence, ...]:
         if len(document.content) > self.limits.max_document_bytes:
             raise AgentLimitError("Retrieved document exceeds agent byte limit")
-        if document.media_type not in {"text/plain", "text/html", "text/csv", "application/json", "application/xhtml+xml"}:
+        if document.media_type not in {"text/plain", "text/csv", "application/json"}:
             raise AgentError("Researcher requires a supported UTF-8 text document")
         # Validate the complete document, rather than silently replacing invalid bytes.
         try:
@@ -124,7 +168,7 @@ class RetrievalResearcherAgent:
                     raise AgentError("Source identifier collides with different provenance")
                 # Identical URL/content snapshots retain their original timestamp and record.
                 sources.setdefault(document.source.id, document.source)
-                for item in self._extract(document, task):
+                for item in await self._document_evidence(document, task):
                     if item.id in evidence and evidence[item.id] != item:
                         raise AgentError("Evidence identifier collides with different content")
                     evidence.setdefault(item.id, item)

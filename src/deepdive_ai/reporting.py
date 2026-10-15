@@ -1,6 +1,7 @@
 """Canonical final narrative: exact accepted claim text, with resolved citations."""
 
 import json
+from dataclasses import asdict
 
 from .models import Claim, ResearchBundle, VerificationResult, VerificationStatus, validate_verification
 
@@ -23,5 +24,7 @@ def render_verified_summary(bundle: ResearchBundle, claims: tuple[Claim, ...],
             citations.append({"evidence_id": item.id, "source_id": source.id, "url": source.url,
                 "locator": item.locator, "content_sha256": source.provenance.content_sha256,
                 "retrieved_at": source.provenance.retrieved_at.isoformat()})
+            if item.extraction is not None:
+                citations[-1]["extraction"] = asdict(item.extraction)
         accepted.append({"id": claim.id, "text": claim.text, "citations": citations})
     return json.dumps({"accepted_claims": accepted}, ensure_ascii=False, indent=2)

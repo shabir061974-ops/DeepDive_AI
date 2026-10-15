@@ -12,6 +12,7 @@ from .agents.synthesizer import VerifiedClaimsSynthesizerAgent
 from .agents.verifier import MeshVerifierAgent
 from .audit import AuditSink
 from .discovery import SourceDiscovery
+from .extraction import ContentExtractor
 from .mesh import MeshClient
 from .retrieval import WebRetriever
 from .workflow import WorkflowCoordinator, WorkflowPolicy, utc_now
@@ -21,6 +22,7 @@ def build_research_workflow(
     *, mesh: MeshClient, model: str, discovery: SourceDiscovery, retriever: WebRetriever,
     audit: AuditSink, limits: AgentLimits = AgentLimits(),
     policy: WorkflowPolicy = WorkflowPolicy(), clock: Callable[[], datetime] = utc_now,
+    extractor: ContentExtractor | None = None,
 ) -> WorkflowCoordinator:
     """Wire the five concrete agents to existing contracts with stricter summary checks.
 
@@ -35,6 +37,6 @@ def build_research_workflow(
     policy = replace(policy, max_tasks=limits.max_tasks, max_claims=limits.max_claims,
                      require_verified_summary=True)
     return WorkflowCoordinator(
-        MeshPlannerAgent(llm), RetrievalResearcherAgent(discovery, retriever, limits, budget),
+        MeshPlannerAgent(llm), RetrievalResearcherAgent(discovery, retriever, limits, budget, extractor),
         MeshDrafterAgent(llm), MeshVerifierAgent(llm), VerifiedClaimsSynthesizerAgent(limits),
         audit, policy, clock)

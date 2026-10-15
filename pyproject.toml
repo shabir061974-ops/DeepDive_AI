@@ -9,6 +9,7 @@ description = "Self-verifying research foundation with bounded Mesh and public H
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "DeepDive AI" }]
+dependencies = ["pypdf==6.20.1"]
 
 [project.optional-dependencies]
 backend = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]

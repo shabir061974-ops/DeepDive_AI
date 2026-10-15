@@ -4,6 +4,7 @@ import hashlib
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.message import Message
 from typing import Awaitable, Callable, Protocol
 from urllib.parse import urljoin, urlsplit
 
@@ -32,6 +33,7 @@ class RetrievedDocument:
     requested_url: str | None = field(default=None, repr=False)
     redirect_chain: tuple[str, ...] = field(default=(), repr=False)
     media_type: str | None = None
+    charset: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.source, Source) or not isinstance(self.content, bytes) or not self.content:
@@ -134,7 +136,8 @@ class HTTPWebRetriever:
                 continue
             if response.status != 200:
                 raise RetrievalError(f"Retrieval failed with HTTP status {response.status}")
-            media_type = (response.header("content-type") or "").split(";", 1)[0].strip().lower()
+            content_type = response.header("content-type") or ""
+            media_type = content_type.split(";", 1)[0].strip().lower()
             if media_type not in self.ALLOWED_TYPES:
                 raise RetrievalError("Source response type is not supported")
             if not response.body:
@@ -143,5 +146,11 @@ class HTTPWebRetriever:
             source_id = hashlib.sha256((current + "\n" + digest).encode("utf-8")).hexdigest()
             source = Source(source_id, current, current, SourceProvenance(
                 self._clock(), digest, "http-get; identity encoding; original response bytes"))
-            return RetrievedDocument(source, response.body, url, tuple(chain), media_type)
+            message = Message()
+            message["content-type"] = content_type
+            charsets = [value for key, value in message.get_params()[1:] if key.lower() == "charset"]
+            if len(charsets) > 1 or (charsets and not isinstance(charsets[0], str)):
+                raise RetrievalError("Source charset declaration is ambiguous")
+            return RetrievedDocument(source, response.body, url, tuple(chain), media_type,
+                                     charsets[0] if charsets else None)
         raise AssertionError("unreachable")
