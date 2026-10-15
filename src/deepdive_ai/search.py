@@ -21,7 +21,7 @@ class BraveSearchSettings:
     api_key: str = field(repr=False)
     endpoint: str = "https://api.search.brave.com/res/v1/web/search"
     search_lang: str = "en"
-    country: str = "ALL"
+    country: str = "US"
     policy: RequestPolicy = field(default_factory=lambda: RequestPolicy(
         timeout_seconds=10, max_retries=1, max_response_bytes=256_000, max_requests=32, max_concurrency=2))
 
@@ -34,8 +34,8 @@ class BraveSearchSettings:
         if (not isinstance(self.search_lang, str) or not 2 <= len(self.search_lang) <= 12
                 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-" for c in self.search_lang)):
             raise ValueError("Invalid Brave search language")
-        if self.country != "ALL" and (not isinstance(self.country, str) or len(self.country) != 2
-                                      or not self.country.isascii() or not self.country.isupper() or not self.country.isalpha()):
+        if (not isinstance(self.country, str) or len(self.country) != 2
+                or not self.country.isascii() or not self.country.isupper() or not self.country.isalpha()):
             raise ValueError("Invalid Brave search country")
         if not isinstance(self.policy, RequestPolicy):
             raise ValueError("Search policy must be a RequestPolicy")
@@ -43,7 +43,7 @@ class BraveSearchSettings:
     @classmethod
     def from_environment(
         cls, environment: Mapping[str, str] | None = None, *, search_lang: str = "en",
-        country: str = "ALL", policy: RequestPolicy | None = None,
+        country: str = "US", policy: RequestPolicy | None = None,
     ) -> "BraveSearchSettings":
         values = os.environ if environment is None else environment
         key = values.get("BRAVE_SEARCH_API_KEY", "")
@@ -79,7 +79,8 @@ class BraveSearchDiscovery:
             raise DiscoveryError("Search query exceeds provider limits or contains invalid controls")
         try:
             query = urlencode({"q": request.query, "count": request.limit, "search_lang": self._settings.search_lang,
-                               "country": self._settings.country, "spellcheck": "false"}, encoding="utf-8", errors="strict")
+                               "country": self._settings.country, "spellcheck": "false",
+                               "result_filter": "web"}, encoding="utf-8", errors="strict")
         except UnicodeError:
             raise DiscoveryError("Search query contains invalid Unicode") from None
         try:

@@ -2,7 +2,14 @@
 
 Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
-## Phase 4 status
+## Phase 5A status
+
+The offline provider readiness audit starts at clean checkpoint `39cc3a0`.
+See [provider requirements, compatibility gaps and the bounded future live-test
+plan](docs/provider_readiness.md). Both required credentials were absent from
+the auditing process environment. Live testing remains blocked pending private
+configuration, approved model/pricing, routing-policy confirmation and SPA review.
+No provider API requests or paid usage occurred during this audit.
 
 This Python 3.12 project includes validated immutable domain models, five async
 agent interfaces and concrete implementations, an injectable workflow coordinator,
@@ -14,8 +21,9 @@ Live search, Mesh compatibility and live research have not been validated.
 Phase 4 starts at commit `5e2d54e`, verified clean before implementation. Phase 1
 and Phase 2 remain the architectural foundation. No live Mesh calls, web retrieval, paid API
 usage, service activation, push or deployment occurred during implementation or
-testing. Mesh protocol compatibility has not been verified against a live service
-or official documentation. Offline success does not establish live readiness.
+testing. Phase 5A compares the adapters with available official documentation;
+exact Mesh wire-format/model compatibility remains unverified. Offline success
+does not establish live readiness.
 
 The existing greeting entrypoint and its two tests are preserved. `main.py`
 still prints a greeting; it does not run research or start a server.
@@ -175,8 +183,9 @@ def compose(mesh_client, model_name, discovery_provider, http_retriever, audit_s
 
 `BraveSearchDiscovery` implements the existing `SourceDiscovery` interface. It
 uses a GET to `https://api.search.brave.com/res/v1/web/search`, a
-`X-Subscription-Token` header, and `q`, `count`, `search_lang`, `country` and
-`spellcheck=false` parameters. It expects a JSON `type: "search"` response with
+`X-Subscription-Token` header, and `q`, `count`, `search_lang`, `country`,
+`spellcheck=false` and `result_filter=web` parameters. It expects a JSON
+`type: "search"` response with
 optional `web.results` URL records. Search snippets/titles never become evidence.
 Missing web results are empty discovery; malformed records or unsafe URLs fail the
 whole request. URLs are normalized and duplicates removed without changing their
@@ -198,12 +207,14 @@ Default search limits: 10-second attempt timeout, one retry, 256,000 response by
 32 lifetime HTTP attempts, two concurrent awaited requests. Queries must fit 400
 characters and 50 whitespace-delimited words; overlong queries are rejected rather
 than silently truncated. SearchRequest accepts 1–20 results. Provider responses
-exceeding the requested count fail. English (`en`) and country `ALL` are defaults;
-other language/country codes must be accepted by the provider. No pagination,
+exceeding the requested count fail. English (`en`) and country `US` are defaults;
+country codes require two uppercase ASCII letters (`ALL` is no longer accepted).
+Other language/country codes must be accepted by the provider. No pagination,
 automatic provider fallback, query rewriting or hard requests-per-second scheduler
 is implemented. Agent-generated task queries must also fit these provider limits.
 
-Pricing assumption: **no free tier, credit allowance or numeric price is assumed**.
+No account-specific free tier, credit allowance or price is assumed. The audit
+records the advertised public price and unresolved account-specific cost gates.
 Plan availability, quotas, attribution/storage rights and costs require review in
 the [Brave API dashboard](https://api-dashboard.search.brave.com/) and
 [provider plan information](https://brave.com/search/api/) before activation.
@@ -304,8 +315,10 @@ authentication and a non-streaming chat-completions JSON envelope: `model`, one
 user `messages` entry, `max_tokens`, and `stream: false`. It expects an `id`, one
 assistant message with string `content`, and `finish_reason: "stop"`. Truncated,
 tool-call, duplicate-key, non-JSON and malformed responses fail closed. This
-envelope is an explicit compatibility assumption, pending official Mesh protocol
-confirmation. Model names are caller supplied; no model availability is assumed.
+basic endpoint/auth/message envelope matches the official quickstart. The exact
+token parameter and strict response subset remain compatibility assumptions;
+see the Phase 5A audit. Model names are caller supplied; no model availability is
+assumed.
 
 The configurable base URL is constrained to the approved Mesh HTTPS origin and
 `/v1` path, with an optional trailing slash, so credentials cannot be redirected
@@ -335,10 +348,13 @@ Construction makes no requests. Configuration example (also makes no requests):
 from deepdive_ai.http_transport import RequestPolicy
 from deepdive_ai.mesh import MeshAPIClient, MeshSettings
 
-policy = RequestPolicy(timeout_seconds=15, max_retries=1, max_requests=10)
+policy = RequestPolicy(timeout_seconds=15, max_retries=0, max_requests=1, max_concurrency=1)
 settings = MeshSettings.from_environment(policy=policy, max_output_tokens=2048)
 client = MeshAPIClient(settings)
 ```
+
+This bounds client attempts only. Mesh gateway retries/fallback require a
+separately verified per-key policy; the live-test plan specifies the gate.
 
 ## Public-source retrieval
 
@@ -477,4 +493,6 @@ strict schemas/citation/quote checks constrain output, but prompt injection and
 semantic misclassification remain model risks. No live source or model accuracy
 claim is made. The workflow is not started by the greeting or health endpoint.
 
-Phase 4 changes remain uncommitted pending SPA review. No later-phase work is included.
+Phase 4 is checkpointed at `39cc3a0`. Phase 5A audit/configuration changes and seven
+new offline tests remain uncommitted pending SPA review. No live integration or
+later-phase application work is included.
