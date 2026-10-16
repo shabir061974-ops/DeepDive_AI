@@ -1,5 +1,8 @@
 # Phase 9: controlled real-adapter research preparation
 
+For the Phase 10 Drafter HTTP-200 metadata rejection and new safe check flags,
+see the [second Mesh validation investigation](second_mesh_validation.md).
+
 For a single source-only diagnostic that uses no Mesh/Brave credentials, see
 the [offline preflight and separately authorized execution commands](source_connectivity.md).
 

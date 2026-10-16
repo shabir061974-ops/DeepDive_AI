@@ -1,0 +1,114 @@
+"""Second-call Mesh metadata failures through the real offline workflow."""
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from deepdive_ai.http_transport import HTTPResponse, _PinnedConnection
+from deepdive_ai.live import run_live
+from test_live import ENV, OPTIONS, MeshTransport, SearchTransport, SourceTransport
+from test_agents import URL, assessment, draft, plan
+
+
+PRIVATE = "private-offline-mesh-value"
+CHECK_NAMES = {"response_json_valid", "root_object", "model_matches", "usage_object",
+               "token_fields_valid", "token_total_matches", "output_limit_satisfied"}
+
+
+class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        Path("artifacts").mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir="artifacts")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for guard in (patch("socket.getaddrinfo", side_effect=AssertionError("No live DNS")),
+                      patch.object(_PinnedConnection, "connect", side_effect=AssertionError("No live sockets"))):
+            guard.start()
+            self.addCleanup(guard.stop)
+
+    async def run_second_response(self, mutate):
+        class Transport(MeshTransport):
+            async def send(self, request):
+                response = await super().send(request)
+                if len(self.calls) == 2:
+                    data = mutate(json.loads(response.body))
+                    body = data if isinstance(data, bytes) else json.dumps(data).encode()
+                    return HTTPResponse(200, response.headers, body)
+                return response
+
+        mesh = Transport(plan(), draft, assessment)
+        with patch("deepdive_ai.demo.run_demo", side_effect=AssertionError("No fixture fallback")):
+            result = await run_live(OPTIONS, execute=True, environment=ENV, output_root=self.root,
+                mesh_transport=mesh, brave_transport=SearchTransport((URL,)), source_transport=SourceTransport())
+        roles = [json.loads(json.loads(request.body)["messages"][0]["content"])["role"] for request in mesh.calls]
+        self.assertEqual(roles[:2], ["planner", "drafter"])
+        folder = self.root / result["run_id"]
+        self.assertEqual(json.loads((folder / "outcome.json").read_text()), result)
+        audit = [json.loads(line)["kind"] for line in (folder / "audit.jsonl").read_text().splitlines()]
+        safe_output = json.dumps(result) + (folder / "audit.jsonl").read_text()
+        for secret in (PRIVATE, *ENV.values(), "private-response-id"):
+            self.assertNotIn(secret, safe_output)
+        return result, audit, folder
+
+    async def assert_metadata_rejected(self, mutate, failed_check):
+        result, audit, folder = await self.run_second_response(mutate)
+        self.assertEqual(result["attempts"], {"mesh": 2, "brave": 1, "source": 1})
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["failure_category"], "response_validation")
+        self.assertNotIn("agent_failure_code", result)
+        details = result["diagnostics"]["mesh"]
+        self.assertEqual(details["http_status"], 200)
+        checks = details["mesh_validation_checks"]
+        self.assertEqual(set(checks), CHECK_NAMES)
+        self.assertTrue(all(type(value) is bool for value in checks.values()))
+        self.assertFalse(checks[failed_check])
+        self.assertEqual(audit, ["started", "planned", "researched", "failed"])
+        self.assertFalse((folder / "report.json").exists())
+        return checks
+
+    async def test_model_usage_shape_total_and_output_failures_remain_distinct(self):
+        for changes, failed in (
+                ({"model": PRIVATE}, "model_matches"),
+                ({"usage": None}, "usage_object"),
+                ({"usage": {"prompt_tokens": 10, "completion_tokens": 20}}, "token_fields_valid"),
+                ({"usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 31}}, "token_total_matches"),
+                ({"usage": {"prompt_tokens": 10, "completion_tokens": 1025, "total_tokens": 1035}}, "output_limit_satisfied")):
+            with self.subTest(failed=failed):
+                await self.assert_metadata_rejected(lambda data: {**data, **changes}, failed)
+
+    async def test_invalid_numeric_types_and_ranges_still_fail_closed(self):
+        for invalid in (True, 20.0, "20", -1, 1_000_000_001, None):
+            with self.subTest(invalid=invalid):
+                await self.assert_metadata_rejected(lambda data: {**data, "usage": {
+                    "prompt_tokens": 10, "completion_tokens": invalid, "total_tokens": 30}}, "token_fields_valid")
+
+    async def test_malformed_json_and_wrong_root_do_not_expose_response_data(self):
+        for mutate, failed in ((lambda data: b"not-json-" + PRIVATE.encode(), "response_json_valid"),
+                               (lambda data: b"\xff", "response_json_valid"),
+                               (lambda data: [PRIVATE], "root_object")):
+            with self.subTest(failed=failed):
+                await self.assert_metadata_rejected(mutate, failed)
+
+    async def test_output_cap_boundary_and_optional_metadata_keep_existing_acceptance(self):
+        result, audit, folder = await self.run_second_response(lambda data: {**data, "extra": PRIVATE,
+            "usage": {"prompt_tokens": 10, "completion_tokens": 1024, "total_tokens": 1034}})
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["report_status"], "verified")
+        self.assertEqual(result["attempts"]["mesh"], 3)
+        self.assertNotIn("mesh", result["diagnostics"])
+        self.assertEqual(audit[-1], "completed")
+        self.assertTrue((folder / "report.json").exists())
+
+    async def test_valid_metadata_does_not_bypass_drafter_json_validation(self):
+        def fenced(data):
+            data["choices"][0]["message"]["content"] = '```json\n{"claims":[]}\n```'
+            return data
+
+        result, audit, folder = await self.run_second_response(fenced)
+        self.assertEqual(result["failure_category"], "agent_contract_failure")
+        self.assertEqual(result["agent_failure_code"], "malformed_agent_json")
+        self.assertNotIn("mesh", result["diagnostics"])
+        self.assertEqual(audit[-1], "failed")
+        self.assertFalse((folder / "report.json").exists())

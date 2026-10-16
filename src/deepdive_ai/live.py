@@ -76,6 +76,7 @@ class ObservedTransport:
 
     async def send(self, request: HTTPRequest) -> HTTPResponse:
         self.attempts += 1
+        validation_checks = None
         hostname = None
         if self.source_diagnostics:
             try:
@@ -96,15 +97,27 @@ class ObservedTransport:
             if self.model is not None and response.status == 200:
                 # The Mesh client independently validates strict JSON/completion shape.
                 # This runner additionally requires the selected model and bounded usage.
+                validation_checks = dict.fromkeys(("response_json_valid", "root_object", "model_matches",
+                    "usage_object", "token_fields_valid", "token_total_matches", "output_limit_satisfied"), False)
                 try:
                     data = json.loads(response.body.decode("utf-8"))
-                    usage = data["usage"]
+                    validation_checks["response_json_valid"] = True
+                    validation_checks["root_object"] = isinstance(data, dict)
+                    if not isinstance(data, dict):
+                        raise ValueError
+                    validation_checks["model_matches"] = data.get("model") == self.model
+                    usage = data.get("usage")
+                    validation_checks["usage_object"] = isinstance(usage, dict)
+                    if not isinstance(usage, dict):
+                        raise ValueError
                     names = ("prompt_tokens", "completion_tokens", "total_tokens")
-                    valid = (data.get("model") == self.model and isinstance(usage, dict)
-                             and all(type(usage.get(n)) is int and 0 <= usage[n] <= 1_000_000_000 for n in names)
-                             and usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
-                             and usage["completion_tokens"] <= 1024)
-                    if not valid:
+                    valid_tokens = all(type(usage.get(n)) is int and 0 <= usage[n] <= 1_000_000_000 for n in names)
+                    validation_checks["token_fields_valid"] = valid_tokens
+                    if valid_tokens:
+                        validation_checks["token_total_matches"] = (
+                            usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"])
+                        validation_checks["output_limit_satisfied"] = usage["completion_tokens"] <= 1024
+                    if not all(validation_checks.values()):
                         raise ValueError
                 except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
                     raise HTTPError("Mesh model or usage incompatible", category=FailureCategory.VALIDATION,
@@ -114,6 +127,8 @@ class ObservedTransport:
             self._record_failure({"category": error.category.value,
                                   "stage": error.stage.value if error.stage else None,
                                   "http_status": error.http_status}, hostname)
+            if error.category == FailureCategory.VALIDATION and validation_checks is not None:
+                self.failure["mesh_validation_checks"] = validation_checks
             raise
         except asyncio.CancelledError:
             # wait_for cancels the inner transport before raising TimeoutError
