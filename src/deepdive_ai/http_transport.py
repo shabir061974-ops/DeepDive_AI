@@ -9,28 +9,86 @@ import ssl
 import threading
 import time
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Awaitable, Callable, Protocol
 from urllib.parse import quote, urlsplit, urlunsplit
+
+
+class FailureCategory(StrEnum):
+    DNS = "dns_failure"
+    TLS = "tls_failure"
+    NETWORK = "network_failure"
+    TIMEOUT = "timeout"
+    UNSAFE_DESTINATION = "unsafe_destination"
+    RESPONSE_TOO_LARGE = "response_too_large"
+    UNSUPPORTED_ENCODING = "unsupported_encoding"
+    PROTOCOL = "http_protocol_failure"
+    INCOMPLETE_RESPONSE = "incomplete_response"
+    REQUEST_LIMIT = "request_limit"
+    AUTHENTICATION = "authentication_http_status"
+    RATE_LIMIT = "rate_limited"
+    BILLING = "billing_http_status"
+    REDIRECT = "redirect_rejected"
+    PROVIDER = "provider_http_status"
+    HTTP_STATUS = "unexpected_http_status"
+    PARSING = "response_parsing"
+    VALIDATION = "response_validation"
+    INTERNAL = "internal_error"
+
+
+def status_category(status: int) -> FailureCategory:
+    if status in (401, 403):
+        return FailureCategory.AUTHENTICATION
+    if status == 402:
+        return FailureCategory.BILLING
+    if status == 429:
+        return FailureCategory.RATE_LIMIT
+    if 300 <= status < 400:
+        return FailureCategory.REDIRECT
+    if 500 <= status < 600:
+        return FailureCategory.PROVIDER
+    return FailureCategory.HTTP_STATUS
 
 
 class HTTPError(RuntimeError):
     """Safe diagnostics only: never include URLs, headers or upstream bodies."""
 
+    default_category = FailureCategory.PROTOCOL
+
+    def __init__(self, message: str = "", *, category: FailureCategory | None = None,
+                 http_status: int | None = None):
+        super().__init__(message)
+        self.category = category if isinstance(category, FailureCategory) else self.default_category
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+
 
 class UnsafeURL(HTTPError):
-    pass
+    default_category = FailureCategory.UNSAFE_DESTINATION
 
 
 class TransportError(HTTPError):
-    pass
+    default_category = FailureCategory.NETWORK
 
 
 class ResponseTooLarge(HTTPError):
-    pass
+    default_category = FailureCategory.RESPONSE_TOO_LARGE
 
 
 class RequestLimitExceeded(HTTPError):
-    pass
+    default_category = FailureCategory.REQUEST_LIMIT
+
+
+def _transport_category(error: BaseException) -> FailureCategory:
+    """Classify by type only; never parse or retain an upstream error message."""
+    if isinstance(error, TimeoutError):
+        return FailureCategory.TIMEOUT
+    if isinstance(error, socket.gaierror):
+        return FailureCategory.DNS
+    if isinstance(error, ssl.SSLError):
+        return FailureCategory.TLS
+    if isinstance(error, http.client.HTTPException):
+        return FailureCategory.PROTOCOL
+    return FailureCategory.NETWORK
 
 
 def positive_int(value: int, name: str) -> None:
@@ -180,8 +238,8 @@ class PublicHTTPTransport:
         deadline = time.monotonic() + request.timeout_seconds
         try:
             return await asyncio.wait_for(asyncio.to_thread(self._send, request, deadline), request.timeout_seconds)
-        except (TimeoutError, OSError, http.client.HTTPException):
-            raise TransportError("HTTP transport failed or timed out") from None
+        except (TimeoutError, OSError, http.client.HTTPException) as error:
+            raise TransportError("HTTP transport failed or timed out", category=_transport_category(error)) from None
 
     def _send(self, request: HTTPRequest, deadline: float) -> HTTPResponse:
         url = validate_url(request.url)
@@ -189,12 +247,15 @@ class PublicHTTPTransport:
         host = parts.hostname
         assert host is not None
         port = 443 if parts.scheme == "https" else 80
-        addresses = self._resolver(host, port)
+        try:
+            addresses = self._resolver(host, port)
+        except OSError:
+            raise TransportError("DNS resolution failed", category=FailureCategory.DNS) from None
         if not addresses or any(not public_ip(ip) for ip in addresses):
             raise UnsafeURL("DNS destination is not public")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise TransportError("HTTP deadline exceeded")
+            raise TransportError("HTTP deadline exceeded", category=FailureCategory.TIMEOUT)
         connection = _PinnedConnection(host, port, addresses[0], remaining, parts.scheme == "https")
         response = None
         wire = None
@@ -219,7 +280,7 @@ class PublicHTTPTransport:
             def set_timeout() -> None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise TransportError("HTTP deadline exceeded")
+                    raise TransportError("HTTP deadline exceeded", category=FailureCategory.TIMEOUT)
                 wire.settimeout(remaining)
 
             set_timeout()
@@ -240,14 +301,14 @@ class PublicHTTPTransport:
                 if len(length) > 20 or int(length) > request.max_response_bytes:
                     raise ResponseTooLarge("HTTP response exceeds byte limit")
             if head.header("content-encoding") not in (None, "identity"):
-                raise HTTPError("Encoded HTTP responses are not supported")
+                raise HTTPError("Encoded HTTP responses are not supported", category=FailureCategory.UNSUPPORTED_ENCODING)
             chunks: list[bytes] = []
             size = 0
             while True:
                 set_timeout()
                 chunk = response.read1(min(65536, request.max_response_bytes + 1 - size))
                 if time.monotonic() >= deadline:
-                    raise TransportError("HTTP deadline exceeded")
+                    raise TransportError("HTTP deadline exceeded", category=FailureCategory.TIMEOUT)
                 if not chunk:
                     break
                 chunks.append(chunk)
@@ -255,8 +316,17 @@ class PublicHTTPTransport:
                 if size > request.max_response_bytes:
                     raise ResponseTooLarge("HTTP response exceeds byte limit")
             if length is not None and size != int(length):
-                raise TransportError("HTTP response was incomplete")
+                raise TransportError("HTTP response was incomplete", category=FailureCategory.INCOMPLETE_RESPONSE)
             return HTTPResponse(head.status, head.headers, b"".join(chunks))
+        except HTTPError as error:
+            # A failed body read can still have a known HTTP status. No body or
+            # headers are attached to the exception.
+            if response is not None and type(response.status) is int and 100 <= response.status <= 599:
+                error.http_status = response.status
+            raise
+        except (TimeoutError, OSError, http.client.HTTPException) as error:
+            raise TransportError("HTTP transport failed or timed out", category=_transport_category(error),
+                                 http_status=response.status if response is not None else None) from None
         finally:
             timer.cancel()
             if response is not None:
@@ -292,10 +362,12 @@ class BoundedHTTPClient:
                     response = await asyncio.wait_for(self.transport.send(HTTPRequest(
                         method, url, headers, body, self.policy.timeout_seconds,
                         self.policy.max_response_bytes)), self.policy.timeout_seconds)
-                except (TransportError, TimeoutError):
+                except (TransportError, TimeoutError) as error:
                     # Retrying ambiguous POST failures can duplicate billable completions.
                     if method != "GET" or attempt == self.policy.max_retries:
-                        raise TransportError("HTTP transport failed or timed out") from None
+                        raise TransportError("HTTP transport failed or timed out",
+                                             category=error.category if isinstance(error, HTTPError) else FailureCategory.TIMEOUT,
+                                             http_status=error.http_status if isinstance(error, HTTPError) else None) from None
             if response is not None:
                 if len(response.body) > self.policy.max_response_bytes:
                     raise ResponseTooLarge("HTTP response exceeds byte limit")

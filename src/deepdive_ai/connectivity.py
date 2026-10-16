@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Mapping
 
-from .http_transport import HTTPRequest, HTTPResponse, HTTPTransport, PublicHTTPTransport, RequestPolicy
+from .http_transport import (
+    FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
+    PublicHTTPTransport, RequestPolicy, status_category,
+)
 from .mesh import MeshAPIClient, MeshRequest, MeshSettings
 from .retrieval import SearchRequest
 from .search import BraveSearchDiscovery, BraveSearchSettings
@@ -53,19 +56,24 @@ class _Observation:
     def __init__(self, transport: HTTPTransport):
         self._transport = transport
         self._response: HTTPResponse | None = None
+        self._failure_status: int | None = None
         self.attempts = 0
 
     async def send(self, request: HTTPRequest) -> HTTPResponse:
         if self.attempts:
             raise RuntimeError("Single-attempt budget exhausted")
         self.attempts += 1
-        response = await self._transport.send(request)
+        try:
+            response = await self._transport.send(request)
+        except HTTPError as error:
+            self._failure_status = error.http_status
+            raise
         self._response = response
         return response
 
     @property
     def status(self) -> int | None:
-        return self._response.status if self._response is not None else None
+        return self._response.status if self._response is not None else self._failure_status
 
     def mesh_metadata(self, version: str | None) -> tuple[bool, dict[str, int] | None, dict]:
         response = self._response
@@ -109,7 +117,8 @@ class _Observation:
 def _result() -> dict:
     return {"status": "not_run", "http_status": None, "attempts": 0,
             "response_compatible": None, "token_usage": None,
-            "estimated_cost_usd": None, "cost_status": "not_run", "diagnostics": {}}
+            "estimated_cost_usd": None, "cost_status": "not_run", "diagnostics": {},
+            "failure_category": None}
 
 
 async def run_connectivity(
@@ -161,6 +170,8 @@ async def run_connectivity(
             # A provider violating the requested output cap is not a passing test.
             compatible = compatible and (usage is None or usage["completion_tokens"] <= 64)
             active.update(response_compatible=compatible, token_usage=usage, diagnostics=diagnostics)
+            if not compatible:
+                active["failure_category"] = FailureCategory.VALIDATION.value
             if compatible:
                 active["status"] = "passed"
                 active["cost_status"] = "usage_unavailable" if usage is None else "response_usage_estimate_not_total_bill"
@@ -168,10 +179,15 @@ async def run_connectivity(
                     cost = (usage["prompt_tokens"] * options.mesh_input_rate
                             + usage["completion_tokens"] * options.mesh_output_rate) / Decimal(1_000_000)
                     active["estimated_cost_usd"] = format(cost, "f")
-    except Exception:
+    except Exception as error:
         # Never format exceptions: even injected transports may contain secrets.
         active["status"] = "failed"
         active["response_compatible"] = False
+        category = (error.category if isinstance(error, HTTPError) else
+                    FailureCategory.TIMEOUT if isinstance(error, TimeoutError) else FailureCategory.INTERNAL)
+        if category == FailureCategory.PROTOCOL and observer.status is not None and observer.status != 200:
+            category = status_category(observer.status)
+        active["failure_category"] = category.value
     finally:
         active.update(http_status=observer.status, attempts=observer.attempts)
     return report

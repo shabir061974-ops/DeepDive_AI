@@ -8,12 +8,17 @@ from typing import Awaitable, Callable, Mapping
 from urllib.parse import urlencode
 
 from .discovery import DiscoveredSource
-from .http_transport import BoundedHTTPClient, HTTPError, HTTPTransport, PublicHTTPTransport, RequestPolicy, validate_url
+from .http_transport import (
+    BoundedHTTPClient, FailureCategory, HTTPError, HTTPTransport, PublicHTTPTransport,
+    RequestPolicy, status_category, validate_url,
+)
 from .retrieval import SearchRequest
 
 
 class DiscoveryError(HTTPError):
     """Sanitized provider failure; no credential, query, URL or response body."""
+
+    default_category = FailureCategory.INTERNAL
 
 
 @dataclass(frozen=True)
@@ -87,11 +92,15 @@ class BraveSearchDiscovery:
             response = await self._http.exchange("GET", self._settings.endpoint + "?" + query, (
                 ("X-Subscription-Token", self._settings.api_key), ("Accept", "application/json"),
                 ("Accept-Encoding", "identity")))
+        except HTTPError as error:
+            raise DiscoveryError("Search provider request failed", category=error.category,
+                                 http_status=error.http_status) from None
         except Exception:
             raise DiscoveryError("Search provider request failed") from None
         # Never follow a redirect while holding a provider credential.
         if response.status != 200:
-            raise DiscoveryError(f"Search provider failed with HTTP status {response.status}")
+            raise DiscoveryError(f"Search provider failed with HTTP status {response.status}",
+                                 category=status_category(response.status), http_status=response.status)
         try:
             if (response.header("content-type") or "").split(";", 1)[0].strip().lower() != "application/json":
                 raise ValueError
@@ -116,5 +125,9 @@ class BraveSearchDiscovery:
                     candidates.append(DiscoveredSource(url))
                     seen.add(url)
             return tuple(candidates)
-        except (ValueError, TypeError, RecursionError, HTTPError):
-            raise DiscoveryError("Search provider returned malformed or unsafe results") from None
+        except HTTPError as error:
+            raise DiscoveryError("Search provider returned malformed or unsafe results", category=error.category,
+                                 http_status=response.status) from None
+        except (ValueError, TypeError, RecursionError):
+            raise DiscoveryError("Search provider returned malformed or unsafe results", category=FailureCategory.PARSING,
+                                 http_status=response.status) from None

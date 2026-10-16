@@ -1,8 +1,11 @@
 # Phase 5B controlled connectivity preparation
 
 Originally prepared from `6e44a0e`; blocker review from clean checkpoint
-`af7926d` on 2026-10-16. No live request
-has been executed. This harness does not run agents, fetch search results,
+`af7926d` on 2026-10-16. A subsequent authorized operator-run Brave attempt
+failed with no complete transport response; Mesh was not attempted. See the
+[offline investigation from `ed37933`](brave_failure_investigation.md).
+No additional live requests were made during that investigation.
+This harness does not run agents, fetch search results,
 activate services, or authenticate during preflight. It adds no dependencies
 and changes no existing adapter or workflow behavior.
 
@@ -63,6 +66,9 @@ validated token counts when available, and cost estimates. It never outputs
 credentials, raw headers, provider error bodies,
 completion text, source URLs, query results, IDs or exception messages. Nothing is
 written to a report file automatically. Do not enable HTTP tracing or dump objects.
+Failures now include a fixed `failure_category` and any status already received
+before a rejected body. A null status still does not prove the server was never
+contacted; successful/unattempted checks have a null failure category.
 
 Brave's estimate is the supplied nominal per-request rate on a successful parsed
 response. Mesh estimates `(prompt_tokens * input_rate + completion_tokens *

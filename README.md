@@ -7,8 +7,11 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 Phase 5B preparation at checkpoint `6e44a0e` adds an explicit controlled
 connectivity harness, defaulting to offline preflight. See the [PowerShell
 commands, limits, cost inputs and stop conditions](docs/controlled_connectivity.md).
-No live tests have been executed. Existing adapters and the five-agent workflow
-are unchanged; the candidate Mesh model is `google/gemini-2.5-flash`.
+The operator's first authorized Brave attempt failed before a complete transport
+response was returned; Mesh was not attempted. See the [offline failure
+investigation](docs/brave_failure_investigation.md). No additional live requests
+were made during that investigation. The candidate Mesh model remains
+`google/gemini-2.5-flash`; the five-agent workflow is unchanged.
 The blocker review from `af7926d` makes version checks optional and treats gateway
 headers as diagnostics. Client request bounds remain strict; live mode requires
 approved account prices plus explicit gateway-risk and spending acknowledgements.
