@@ -29,9 +29,11 @@ class TestOptions:
     mesh_output_rate: Decimal | None = None
     brave_request_rate: Decimal | None = None
     spending_confirmed: bool = False
+    brave_only: bool = False
 
     def __post_init__(self) -> None:
-        if type(self.gateway_risk_accepted) is not bool or type(self.spending_confirmed) is not bool:
+        if (type(self.gateway_risk_accepted) is not bool or type(self.spending_confirmed) is not bool
+                or type(self.brave_only) is not bool):
             raise ValueError("Invalid safety acknowledgement")
         if self.mesh_version is not None and (
             not isinstance(self.mesh_version, str)
@@ -127,29 +129,33 @@ async def run_connectivity(
 ) -> dict:
     """Preflight by default. Callers must explicitly opt in to any external action."""
     values = os.environ if environment is None else environment
-    report = {"mode": "live" if execute else "preflight", "ready": False, "blockers": [],
+    report = {"mode": "live" if execute else "preflight", "scope": "brave_only" if options.brave_only else "both",
+              "ready": False, "blockers": [],
               "brave": _result(), "mesh": _result()}
     blockers = report["blockers"]
-    try:
-        mesh_settings = MeshSettings.from_environment(values, policy=_policy(15), max_output_tokens=64)
-    except Exception:
-        blockers.append("mesh_credential_missing_or_invalid")
+    if not options.brave_only:
+        try:
+            mesh_settings = MeshSettings.from_environment(values, policy=_policy(15), max_output_tokens=64)
+        except Exception:
+            blockers.append("mesh_credential_missing_or_invalid")
     try:
         brave_settings = BraveSearchSettings.from_environment(values, policy=_policy(10))
     except Exception:
         blockers.append("brave_credential_missing_or_invalid")
-    if not options.gateway_risk_accepted:
+    if not options.brave_only and not options.gateway_risk_accepted:
         blockers.append("gateway_uncertainty_not_accepted")
     if not options.spending_confirmed:
         blockers.append("approved_spend_controls_not_confirmed")
-    if any(rate is None for rate in (options.mesh_input_rate, options.mesh_output_rate, options.brave_request_rate)):
+    required_rates = ((options.brave_request_rate,) if options.brave_only else
+                      (options.mesh_input_rate, options.mesh_output_rate, options.brave_request_rate))
+    if any(rate is None for rate in required_rates):
         blockers.append("approved_account_prices_required")
     report["ready"] = not blockers
     if blockers or not execute:
         return report
 
     brave = _Observation(brave_transport if brave_transport is not None else PublicHTTPTransport())
-    mesh = _Observation(mesh_transport if mesh_transport is not None else PublicHTTPTransport())
+    mesh = None if options.brave_only else _Observation(mesh_transport if mesh_transport is not None else PublicHTTPTransport())
     active = report["brave"]
     observer = brave
     try:
@@ -160,6 +166,9 @@ async def run_connectivity(
                           estimated_cost_usd=format(options.brave_request_rate, "f"),
                           cost_status="nominal_account_rate_not_invoice")
             active.update(http_status=brave.status, attempts=brave.attempts)
+
+            if options.brave_only:
+                return report
 
             active = report["mesh"]
             observer = mesh
@@ -207,6 +216,7 @@ def _rate(value: str) -> Decimal:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="Make up to one request per provider; may incur charges")
+    parser.add_argument("--brave-only", action="store_true", help="Test Brave only; never read Mesh credentials or invoke Mesh")
     parser.add_argument("--accept-gateway-uncertainty", action="store_true",
                         help="Accept that client limits cannot bound gateway attempts, latency or billing")
     parser.add_argument("--confirm-spend-controls", action="store_true",
@@ -218,7 +228,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         options = TestOptions(args.accept_gateway_uncertainty, args.mesh_version, args.mesh_input_usd_per_million,
-                              args.mesh_output_usd_per_million, args.brave_usd_per_request, args.confirm_spend_controls)
+                              args.mesh_output_usd_per_million, args.brave_usd_per_request, args.confirm_spend_controls,
+                              args.brave_only)
         report = asyncio.run(run_connectivity(options, execute=args.execute))
     except KeyboardInterrupt:
         print('{"status":"interrupted","cost_status":"unknown_may_be_billable"}')
@@ -229,7 +240,8 @@ def main() -> int:
     print(json.dumps(report, sort_keys=True))
     if not report["ready"]:
         return 2
-    return 0 if not args.execute or all(report[p]["status"] == "passed" for p in ("brave", "mesh")) else 1
+    providers = ("brave",) if args.brave_only else ("brave", "mesh")
+    return 0 if not args.execute or all(report[p]["status"] == "passed" for p in providers) else 1
 
 
 if __name__ == "__main__":

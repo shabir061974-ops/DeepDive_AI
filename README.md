@@ -23,6 +23,12 @@ enabled. The operator reported that certifi resolved a local issuer-chain TLS
 failure in a separate unauthenticated handshake diagnostic. This integration
 was tested offline only; authenticated provider compatibility remains unverified.
 
+Brave-only retest preparation from `626b394` adds `--brave-only` to the harness.
+It performs at most one Brave request and never reads Mesh credentials or invokes
+Mesh, on success or failure. Existing Brave spending and security controls remain
+required. See the [preflight and proposed retest commands](docs/controlled_connectivity.md#brave-only-retest-preparation);
+no live retest was performed during preparation.
+
 The offline provider readiness audit starts at clean checkpoint `39cc3a0`.
 See [provider requirements, compatibility gaps and the bounded future live-test
 plan](docs/provider_readiness.md). Both required credentials were absent from

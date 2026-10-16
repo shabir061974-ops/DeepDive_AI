@@ -16,11 +16,18 @@ was verified offline only and does not authorize another live request.
 ## Bounds and stop conditions
 
 `python -m deepdive_ai.connectivity` defaults to **offline preflight**.
-Only `--execute` opts in to external requests. Each invocation permits at most
+Only `--execute` opts in to external requests. In the default two-provider mode, each invocation permits at most
 one Brave GET and one Mesh POST, sequentially, with zero automatic retries.
 Brave runs first; any failure prevents Mesh from being contacted. Do not rerun
 live mode after a failure without reviewing the outcome and authorizing another
 potential charge. Limits apply per invocation, not across separate processes.
+
+The Brave-only retest preparation from clean checkpoint `626b394` adds
+`--brave-only`. In that mode both Brave success and failure leave Mesh `not_run`
+with zero attempts. Mesh credentials are not read, and Mesh settings, client and
+transport are not constructed. Only the Brave price and existing spend-control
+confirmation are required; Mesh-specific price/version/gateway inputs do not
+apply. The default two-provider path retains its existing gates and behavior.
 
 - Mesh model: fixed `google/gemini-2.5-flash`; prompt: `Reply exactly OK.`
 - Mesh timeout: 15 seconds; requested output limit: 64 tokens.
@@ -32,7 +39,7 @@ potential charge. Limits apply per invocation, not across separate processes.
 - Overall awaited execution deadline: 30 seconds. OS DNS resolution can outlive
   cancellation in a worker thread; timeout does not prove provider work stopped.
 
-The budget means one **client HTTP request per provider**, not one Mesh upstream
+In two-provider mode the budget means one **client HTTP request per provider**, not one Mesh upstream
 attempt. The old `--confirm-routing` flag is removed: it could not enforce or
 verify that assertion. `--accept-gateway-uncertainty` instead acknowledges that
 gateway attempts, fallback, processing time and total charges are outside local
@@ -109,12 +116,47 @@ The 64-token cap is checked against valid reported completion usage when present
 It is not a tokenizer, a thinking-token guarantee or a billable-token ceiling.
 Google's published direct rates must not substitute for unverified Mesh rates.
 
-Exit codes: `0` = ready preflight or both live checks passed; `1` = failed or
+Exit codes: `0` = ready preflight or all selected live checks passed; `1` = failed or
 inconclusive execution/configuration; `2` = preflight blocked or invalid CLI
 arguments; `130` = interrupted. `ready` refers to local preflight only, not
 credential authentication or provider readiness.
 
 ## PowerShell commands
+
+### Brave-only retest preparation
+
+Use the existing PowerShell terminal holding `BRAVE_SEARCH_API_KEY`. Python
+inherits that environment without printing the key; no Mesh credential is
+needed or inspected. After reviewing approved Brave account pricing and spending
+controls, prepare the arguments and run the **offline preflight**:
+
+```powershell
+Set-Location -LiteralPath 'D:\Developments\DeepDive_AI'
+$braveRetestArgs = @(
+    '--brave-only'
+    '--confirm-spend-controls'
+    '--brave-usd-per-request', (Read-Host 'Approved Brave USD per request')
+)
+.\.venv\Scripts\python.exe -m deepdive_ai.connectivity @braveRetestArgs
+if ($LASTEXITCODE -ne 0) { throw 'Brave preflight blocked; do not execute.' }
+```
+
+**Proposed live command, only after SPA review and explicit retest/spend approval:**
+
+```powershell
+.\.venv\Scripts\python.exe -m deepdive_ai.connectivity @braveRetestArgs --execute
+if ($LASTEXITCODE -ne 0) { throw 'Brave retest failed or inconclusive; do not retry.' }
+```
+
+Run live mode at most once after approval. It issues at most one Brave GET, with
+zero retries, a 10-second attempt timeout, 16,384-byte response cap and unchanged
+30-second overall awaited deadline. Query/result count, certifi CA bundle,
+certificate/hostname checking, SNI, SSRF/redirect protections, cost handling and
+sanitized failure categories are unchanged. No result URLs are fetched and no
+agents run. Requests may still be billable on failure; there is no local hard
+dollar ceiling. This preparation does not execute or authorize the command.
+
+### Default two-provider test
 
 Run these from the **existing PowerShell terminal holding both credentials**.
 The child `.venv` Python process inherits that terminal's environment. No `.env`
@@ -190,3 +232,11 @@ PowerShell command parsing (without execution), and `git diff --check` passed.
 Only README, the two provider/test documents, the connectivity harness and its
 tests are modified; nothing is staged. No credentials were accessed and no live
 provider API requests were made. Await SPA review; do not execute yet.
+
+Brave-only preparation from `626b394`: all 176 offline tests passed in 7.832
+seconds, with zero failures/errors/skips (168 existing unchanged and eight new).
+Compilation, PowerShell command parsing without execution, `git diff --check`
+and new-file whitespace checks passed. Only the harness, its new Brave-only
+tests, README and this document are changed, all unstaged. No live requests,
+real credential inspection, commits, pushes or deployments were performed.
+Stop for SPA review before execution.
