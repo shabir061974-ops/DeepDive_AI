@@ -2,12 +2,12 @@
 
 import asyncio
 import json
-import os
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Mapping
 from urllib.parse import urlencode
 
 from .discovery import DiscoveredSource
+from .configuration import provider_key
 from .http_transport import (
     BoundedHTTPClient, FailureCategory, HTTPError, HTTPTransport, PublicHTTPTransport,
     RequestPolicy, status_category, validate_url,
@@ -50,8 +50,7 @@ class BraveSearchSettings:
         cls, environment: Mapping[str, str] | None = None, *, search_lang: str = "en",
         country: str = "US", policy: RequestPolicy | None = None,
     ) -> "BraveSearchSettings":
-        values = os.environ if environment is None else environment
-        key = values.get("BRAVE_SEARCH_API_KEY", "")
+        key = provider_key("BRAVE_SEARCH_API_KEY", environment)
         if policy is None:
             return cls(api_key=key, search_lang=search_lang, country=country)
         return cls(api_key=key, search_lang=search_lang, country=country, policy=policy)

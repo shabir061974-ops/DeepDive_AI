@@ -1,6 +1,5 @@
 """Exclusive application LLM boundary, using Mesh's configured HTTPS origin."""
 
-import os
 import asyncio
 import json
 from dataclasses import dataclass, field
@@ -12,6 +11,7 @@ from .http_transport import (
 )
 
 from .models import nonempty
+from .configuration import provider_key
 
 
 @dataclass(frozen=True)
@@ -38,8 +38,7 @@ class MeshSettings:
         base_url: str = "https://api.meshapi.ai/v1", max_output_tokens: int = 4096,
         policy: RequestPolicy = RequestPolicy(),
     ) -> "MeshSettings":
-        values = os.environ if environment is None else environment
-        return cls(api_key=values.get("MESH_API_KEY", ""), base_url=base_url,
+        return cls(api_key=provider_key("MESH_API_KEY", environment), base_url=base_url,
                    max_output_tokens=max_output_tokens, policy=policy)
 
 

@@ -3,7 +3,6 @@
 import argparse
 import asyncio
 import json
-import os
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -134,7 +133,6 @@ async def run_connectivity(
     brave_transport: HTTPTransport | None = None, mesh_transport: HTTPTransport | None = None,
 ) -> dict:
     """Preflight by default. Callers must explicitly opt in to any external action."""
-    values = os.environ if environment is None else environment
     scope = "mesh_only" if options.mesh_only else "brave_only" if options.brave_only else "both"
     report = {"mode": "live" if execute else "preflight", "scope": scope,
               "ready": False, "blockers": [],
@@ -142,12 +140,12 @@ async def run_connectivity(
     blockers = report["blockers"]
     if not options.brave_only:
         try:
-            mesh_settings = MeshSettings.from_environment(values, policy=_policy(15), max_output_tokens=64)
+            mesh_settings = MeshSettings.from_environment(environment, policy=_policy(15), max_output_tokens=64)
         except Exception:
             blockers.append("mesh_credential_missing_or_invalid")
     if not options.mesh_only:
         try:
-            brave_settings = BraveSearchSettings.from_environment(values, policy=_policy(10))
+            brave_settings = BraveSearchSettings.from_environment(environment, policy=_policy(10))
         except Exception:
             blockers.append("brave_credential_missing_or_invalid")
     if not options.brave_only and not options.gateway_risk_accepted:

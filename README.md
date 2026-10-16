@@ -6,6 +6,14 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
 Developed by Chabir Ahamad Abusali
 
+## Private credential configuration
+
+Provider settings automatically fall back to the protected private file
+`D:\Developments\DeepDive_AI.env`. Process variables take precedence, including
+an explicitly empty value. Use the [masked, one-time PowerShell setup](docs/private_configuration.md).
+No credential file is created automatically and no existing keys are copied.
+Source-only diagnostics and the offline dashboard remain credential-independent.
+
 ## Submission status and demo
 
 The five-agent pipeline is verified end to end with mocked HTTP provider
@@ -461,8 +469,9 @@ def compose_web_research(mesh_client, model_name, audit_sink):
     )
 ```
 
-Credentials are process environment variables, `MESH_API_KEY` and
-`BRAVE_SEARCH_API_KEY`. `.env` files are ignored and not automatically loaded.
+Credentials use process environment variables `MESH_API_KEY` and
+`BRAVE_SEARCH_API_KEY`, falling back to the protected private file described
+[above](#private-credential-configuration). No project-local `.env` search occurs.
 Never log settings with `dataclasses.asdict()`, which would include credentials.
 Calling a workflow later would perform external operations; this example does not
 invoke it. No default provider is silently activated at import or server startup.
@@ -626,7 +635,8 @@ covered by this CI preparation.
 
 Future separately authorized live research requires process environment names
 `MESH_API_KEY` and `BRAVE_SEARCH_API_KEY`, an approved model and explicit provider
-budgets. `.env` files are ignored and are not automatically loaded. No full live
+budgets. The protected private file is an optional fallback; credential files
+are ignored by Git and excluded from packaging. No full live
 runner or live dashboard endpoint is enabled by these installation commands.
 
 ## Verification

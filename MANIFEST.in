@@ -1,0 +1,1 @@
+global-exclude .env .env.* *.env *.env.* *.key *.pem *.p12 *.pfx

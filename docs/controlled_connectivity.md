@@ -153,8 +153,8 @@ credential authentication or provider readiness.
 
 Use the existing PowerShell terminal holding `MESH_API_KEY`. Brave credentials
 are unnecessary. Supply only privately reviewed, account-approved Mesh rates;
-these prompts are for non-secret prices, never API keys. The application does
-not automatically load `.env` files.
+these prompts are for non-secret prices, never API keys. A protected private
+credential file is now supported as a fallback; see [one-time setup](private_configuration.md).
 
 ```powershell
 Set-Location -LiteralPath 'D:\Developments\DeepDive_AI'
@@ -227,9 +227,11 @@ dollar ceiling. This preparation does not execute or authorize the command.
 ### Default two-provider test
 
 Run these from the **existing PowerShell terminal holding both credentials**.
-The child `.venv` Python process inherits that terminal's environment. No `.env`
-loader, persistent Windows variables, credential command arguments, or new
-terminal is needed. The agent's tool process need not share that environment.
+The child `.venv` Python process inherits that terminal's environment, which
+takes precedence over the protected private file. With [one-time setup](private_configuration.md),
+a new terminal can use that file without persistent Windows environment
+variables or credential command arguments. Tool processes need not share the
+original terminal environment.
 
 After privately confirming Mesh-specific rates, accepted spend exposure and
 provider spending controls, prepare the arguments and run preflight. No version

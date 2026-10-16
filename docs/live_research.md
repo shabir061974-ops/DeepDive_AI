@@ -92,8 +92,9 @@ option. The existing offline dashboard and its exact attribution are unchanged.
 Preflight validates syntax, policy acknowledgements and environment credential
 format only. It creates no transport or output files and never authenticates a
 key, resolves DNS, validates account prices or promises successful research.
-Credentials are inherited from the invoking PowerShell process via `MESH_API_KEY`
-and `BRAVE_SEARCH_API_KEY`; `.env` is not loaded automatically. Safety gates are
+Credentials use `MESH_API_KEY` and `BRAVE_SEARCH_API_KEY` from the invoking
+process, with the protected `D:\Developments\DeepDive_AI.env` file as fallback.
+See [masked one-time setup and precedence](private_configuration.md). Safety gates are
 checked before credential configuration. No price or credential is hardcoded.
 
 With explicit execution, a fresh UUID directory under the current checkout's
