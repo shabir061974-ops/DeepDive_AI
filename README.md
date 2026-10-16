@@ -6,6 +6,16 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
 Developed by Chabir Ahamad Abusali
 
+## Submission status and demo
+
+The five-agent pipeline is verified end to end with mocked HTTP provider
+responses, and the six-scenario dashboard remains explicitly offline. The
+published Phase 9 checkpoint `1e181bd` passed its own [Offline CI run](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/38929566748).
+Mesh connectivity is operator-verified; Brave readiness and a complete live
+five-agent run remain unverified. No live research success or benchmark accuracy
+is claimed. See the [demo rehearsal, YouTube script and submission checklist](docs/submission_readiness.md)
+and [controlled live-run instructions](docs/live_research.md).
+
 ## Publication and CI readiness
 
 Phase 8 preparation starts at `4f415ac` on `master`. The application remains a
@@ -17,7 +27,8 @@ The prepared `.github/workflows/offline-ci.yml` runs on pushes and pull requests
 Windows Server 2025, Python 3.12, Node 24, a new `.venv`, the backend extra,
 all offline Python tests, compilation, JavaScript syntax and the installed-Chrome
 smoke test. It uses no Mesh, Brave or submission credentials. Hosted execution
-is not verified until a future authorized GitHub publication triggers it.
+passed for published checkpoint `1e181bd`; later changes must pass their own CI
+run before being described as verified.
 Package installation downloads dependencies; the test workload is offline.
 
 The exact official hackathon workflow was retrieved and preserved as the

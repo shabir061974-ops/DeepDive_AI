@@ -164,6 +164,20 @@ uncertainty without reviewing exposure and authorizing another invocation.
 
 ## Offline verification scope
 
+The final sprint fixes the reviewed enforced-timeout diagnostic gap. When a
+bounded client cancels its inner transport, the runner now snapshots only the
+fixed stage/status before propagating cancellation. A bounded, cycle-safe walk
+through typed exception context retrieves the client's timeout classification
+through sanitizing agent boundaries. No exception messages or raw responses
+are exposed. External task cancellation remains `interrupted` with
+`request_cancelled` diagnostics; it is not falsely called a provider timeout.
+No timeout, retry, request, spending, TLS or verification limit changed.
+
+Three regression tests cover the enforced per-request deadline (rather than
+only injecting a preclassified error), external cancellation and safe/cyclic
+exception context. The historical validation below remains a Phase 9 record;
+the sprint's current validation is in [submission readiness](submission_readiness.md).
+
 Seventeen new deterministic tests inject authored Mesh chat-completion HTTP
 responses, Brave result envelopes and source bytes into real adapters and five
 agents. They cover success/persistence/provenance, contradictions, insufficient

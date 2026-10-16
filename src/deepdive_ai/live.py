@@ -94,6 +94,30 @@ class ObservedTransport:
             self.failure = {"category": error.category.value,
                             "stage": error.stage.value if error.stage else None, "http_status": error.http_status}
             raise
+        except asyncio.CancelledError:
+            # wait_for cancels the inner transport before raising TimeoutError
+            # outside this observer. Preserve only its fixed progress snapshot.
+            stage, status = request.progress.snapshot() if request.progress is not None else (None, None)
+            self.failure = {"category": "request_cancelled", "stage": stage.value if stage else None,
+                            "http_status": status}
+            raise
+
+
+def http_failure(error: BaseException) -> dict | None:
+    """Read typed diagnostics through sanitizing agent boundaries, never messages."""
+    seen: set[int] = set()
+    for _ in range(8):
+        if id(error) in seen:
+            break
+        seen.add(id(error))
+        if isinstance(error, HTTPError):
+            return {"category": error.category.value, "stage": error.stage.value if error.stage else None,
+                    "http_status": error.http_status}
+        nested = error.__cause__ if error.__cause__ is not None else error.__context__
+        if nested is None:
+            break
+        error = nested
+    return None
 
 
 async def run_live(
@@ -159,8 +183,16 @@ async def run_live(
     except Exception as error:
         # Agent boundaries sanitize errors; never print even injected exception text.
         result["status"] = "failed"
+        details = http_failure(error)
         result["failure_category"] = ("agent_contract_failure" if isinstance(error, AgentOutputError) else
-                                      "timeout" if isinstance(error, TimeoutError) else "workflow_or_storage_failure")
+                                      "timeout" if isinstance(error, TimeoutError) else
+                                      details["category"] if details else "workflow_or_storage_failure")
+        if details is not None:
+            result["failure_details"] = details
+            for observer in observers.values():
+                if observer.failure is not None and observer.failure["category"] == "request_cancelled":
+                    observer.failure = {key: value if value is not None else observer.failure.get(key)
+                                        for key, value in details.items()}
     except asyncio.CancelledError:
         result["status"] = "interrupted"
         raise

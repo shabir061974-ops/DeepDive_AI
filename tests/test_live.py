@@ -15,7 +15,7 @@ from unittest.mock import patch
 from deepdive_ai.audit import AuditEvent, AuditKind
 from deepdive_ai.connectivity import TestOptions
 from deepdive_ai.http_transport import FailureCategory, HTTPResponse, TransportError, TransportStage, _PinnedConnection
-from deepdive_ai.live import LiveOptions, main, run_live
+from deepdive_ai.live import LiveOptions, http_failure, main, policy, run_live
 from deepdive_ai.persistence import JsonlAuditSink, write_record
 from test_agents import BODY, COUNTER, STATEMENT, URL, OTHER_URL, assessment, draft, plan
 
@@ -190,6 +190,48 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((len(mesh.calls), len(search.calls), len(source.calls)), (1, 1, 0))
         self.assertNotIn("private response", json.dumps(result))
 
+    async def test_enforced_brave_deadline_preserves_stage_and_safe_classification(self):
+        class HangingSearch(SearchTransport):
+            async def send(self, request):
+                self.calls.append(request)
+                request.progress.update(TransportStage.HEADERS)
+                await asyncio.sleep(60)
+                raise AssertionError("Deadline must cancel the exchange")
+
+        def short_policy(timeout, requests, response_bytes):
+            configured = policy(timeout, requests, response_bytes)
+            return replace(configured, timeout_seconds=0.01) if requests == 2 else configured
+
+        with patch("deepdive_ai.live.policy", side_effect=short_policy):
+            result, mesh, search, source = await self.run_case(search=HangingSearch())
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["failure_category"], "timeout")
+        self.assertEqual(result["diagnostics"]["brave"], {
+            "category": "timeout", "stage": "response_headers", "http_status": None})
+        self.assertEqual((len(mesh.calls), len(search.calls), len(source.calls)), (1, 1, 0))
+
+    async def test_external_cancellation_is_not_misreported_as_provider_timeout(self):
+        started = asyncio.Event()
+
+        class HangingSearch(SearchTransport):
+            async def send(self, request):
+                self.calls.append(request)
+                request.progress.update(TransportStage.BODY, 200)
+                started.set()
+                await asyncio.sleep(60)
+
+        task = asyncio.create_task(self.run_case(search=HangingSearch()))
+        await asyncio.wait_for(started.wait(), 1)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        outcomes = list(self.root.glob("*/outcome.json"))
+        self.assertEqual(len(outcomes), 1)
+        result = json.loads(outcomes[0].read_text())
+        self.assertEqual(result["status"], "interrupted")
+        self.assertEqual(result["diagnostics"]["brave"], {
+            "category": "request_cancelled", "stage": "response_body", "http_status": 200})
+
     async def test_missing_credentials_or_approvals_block_before_artifacts_or_network(self):
         for options, env in ((OPTIONS, {}), (replace(OPTIONS, approvals=TestOptions()), ENV)):
             with patch("deepdive_ai.live.PublicHTTPTransport") as transport:
@@ -280,6 +322,14 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
 class PersistenceTests(unittest.TestCase):
     def setUp(self):
         Path("artifacts").mkdir(exist_ok=True)
+
+    def test_failure_context_is_bounded_and_never_returns_exception_text(self):
+        error = RuntimeError("private message")
+        error.__context__ = error
+        self.assertIsNone(http_failure(error))
+        error.__context__ = TransportError("private credential", category=FailureCategory.TIMEOUT,
+                                           stage=TransportStage.TLS)
+        self.assertEqual(http_failure(error), {"category": "timeout", "stage": "tls_handshake", "http_status": None})
 
     def test_audit_is_exclusive_flushes_and_rejects_overlarge_events(self):
         with tempfile.TemporaryDirectory(dir="artifacts") as directory:
