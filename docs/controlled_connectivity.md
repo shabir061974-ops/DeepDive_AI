@@ -36,6 +36,13 @@ transport are not constructed. Only the Brave price and existing spend-control
 confirmation are required; Mesh-specific price/version/gateway inputs do not
 apply. The default two-provider path retains its existing gates and behavior.
 
+Phase 7A preparation from `bfa152d` adds mutually exclusive `--mesh-only`.
+It skips Brave credentials, settings, prices, transport and discovery on success
+and failure. Brave stays `not_run` with zero attempts. Mesh credentials, both
+Mesh rates and the existing gateway-risk/spend-control acknowledgements remain
+required. See the [Mesh readiness findings](mesh_readiness.md). Neither isolated
+mode changes the default two-provider behavior or authorizes live execution.
+
 - Mesh model: fixed `google/gemini-2.5-flash`; prompt: `Reply exactly OK.`
 - Mesh timeout: 15 seconds; requested output limit: 64 tokens.
 - Brave query: `Python documentation`, one result, `en/US`, web-only; timeout:
@@ -46,7 +53,7 @@ apply. The default two-provider path retains its existing gates and behavior.
 - Overall awaited execution deadline: 30 seconds. OS DNS resolution can outlive
   cancellation in a worker thread; timeout does not prove provider work stopped.
 
-In two-provider mode the budget means one **client HTTP request per provider**, not one Mesh upstream
+Whenever Mesh is selected the budget means one **client HTTP request per provider**, not one Mesh upstream
 attempt. The old `--confirm-routing` flag is removed: it could not enforce or
 verify that assertion. `--accept-gateway-uncertainty` instead acknowledges that
 gateway attempts, fallback, processing time and total charges are outside local
@@ -129,6 +136,47 @@ arguments; `130` = interrupted. `ready` refers to local preflight only, not
 credential authentication or provider readiness.
 
 ## PowerShell commands
+
+### Mesh-only test preparation
+
+Use the existing PowerShell terminal holding `MESH_API_KEY`. Brave credentials
+are unnecessary. Supply only privately reviewed, account-approved Mesh rates;
+these prompts are for non-secret prices, never API keys. The application does
+not automatically load `.env` files.
+
+```powershell
+Set-Location -LiteralPath 'D:\Developments\DeepDive_AI'
+$meshTestArgs = @(
+    '--mesh-only'
+    '--accept-gateway-uncertainty'
+    '--confirm-spend-controls'
+    '--mesh-input-usd-per-million', (Read-Host 'Approved Mesh input USD per million tokens')
+    '--mesh-output-usd-per-million', (Read-Host 'Approved Mesh output USD per million tokens')
+)
+.\.venv\Scripts\python.exe -m deepdive_ai.connectivity @meshTestArgs
+if ($LASTEXITCODE -ne 0) { throw 'Mesh preflight blocked; do not execute.' }
+```
+
+This preflight is offline and cannot authenticate the key or confirm prices.
+Do not attest gateway risk or spending review until those reviews are complete.
+Do not substitute Google's direct prices for unverified Mesh account prices.
+
+**Proposed live command, only after SPA review and independent live-test/spend
+authorization; not executed during preparation:**
+
+```powershell
+.\.venv\Scripts\python.exe -m deepdive_ai.connectivity @meshTestArgs --execute
+if ($LASTEXITCODE -ne 0) { throw 'Mesh test failed or inconclusive; do not retry.' }
+```
+
+Run at most once after approval. This selects only one Mesh POST, zero retries,
+the existing 15-second attempt timeout, 30-second outer awaited deadline,
+64 requested output tokens and 16,384-byte response cap. There is no Brave
+request, source fetching or five-agent workflow. Stop for review on failure,
+missing usage, unexpected routing diagnostics or any other inconclusive result;
+never automatically resubmit. Unknown usage/routing can accompany exit code 0:
+that means response compatibility, not verified billing or gateway behavior.
+If account pricing/spend exposure cannot be approved, do not execute.
 
 ### Brave-only retest preparation
 

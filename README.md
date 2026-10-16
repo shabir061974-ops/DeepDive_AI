@@ -33,6 +33,18 @@ schemas and contradiction vetoes, but scripted assessments are not independent
 model accuracy evaluation. Counts are not benchmark scores. See the
 [Phase 6 runbook, security boundaries and verification](docs/phase6_dashboard.md).
 
+### Phase 7A Mesh-only readiness
+
+Preparation from clean checkpoint `bfa152d` adds `--mesh-only` to the controlled
+connectivity harness. It skips Brave credentials, pricing, transport and calls;
+Brave connectivity does not block this isolated test. Default execution remains
+offline preflight. The existing Mesh TLS, one-request/zero-retry policy, timeouts,
+token/byte limits and spending acknowledgements are unchanged. No live Mesh
+request was performed; authentication, model availability, wire compatibility
+and account pricing remain unverified. See the [readiness findings and separately
+authorized future test commands](docs/mesh_readiness.md). The dashboard remains
+an offline fixture demonstration. Await SPA review before live execution.
+
 ### Earlier provider checkpoints
 
 Phase 5B preparation at checkpoint `6e44a0e` adds an explicit controlled
