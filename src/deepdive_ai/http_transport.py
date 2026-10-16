@@ -13,6 +13,8 @@ from enum import StrEnum
 from typing import Awaitable, Callable, Protocol
 from urllib.parse import quote, urlsplit, urlunsplit
 
+import certifi
+
 
 class FailureCategory(StrEnum):
     DNS = "dns_failure"
@@ -218,14 +220,15 @@ class _PinnedConnection(http.client.HTTPConnection):
         try:
             raw.settimeout(self.timeout)
             raw.connect((self.address, self.port))
-            self.sock = ssl.create_default_context().wrap_socket(raw, server_hostname=self.host) if self.tls else raw
+            self.sock = (ssl.create_default_context(cafile=certifi.where()).wrap_socket(raw, server_hostname=self.host)
+                         if self.tls else raw)
         except BaseException:
             raw.close()
             raise
 
 
 class PublicHTTPTransport:
-    """TLS verification enabled. Every exchange resolves once and pins one IP.
+    """TLS verification uses certifi. Every exchange resolves once and pins one IP.
 
     OS DNS lookup runs in a worker, bounded from the async caller by wait_for.
     A late DNS result is discarded before opening a connection using the deadline.

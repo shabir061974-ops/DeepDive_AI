@@ -6,8 +6,12 @@ failed with no complete transport response; Mesh was not attempted. See the
 [offline investigation from `ed37933`](brave_failure_investigation.md).
 No additional live requests were made during that investigation.
 This harness does not run agents, fetch search results,
-activate services, or authenticate during preflight. It adds no dependencies
-and changes no existing adapter or workflow behavior.
+activate services, or authenticate during preflight. The harness originally
+added no dependencies. The subsequent secure CA-bundle update from `6c8e416`
+pins `certifi==2026.7.22` and passes its bundle to the shared HTTPS transport's
+verified SSL context. Certificate/hostname verification, SNI, DNS/IP safeguards,
+budgets, retries, timeouts and spending controls remain in force. That integration
+was verified offline only and does not authorize another live request.
 
 ## Bounds and stop conditions
 

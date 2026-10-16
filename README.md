@@ -17,6 +17,12 @@ headers as diagnostics. Client request bounds remain strict; live mode requires
 approved account prices plus explicit gateway-risk and spending acknowledgements.
 No local hard dollar ceiling or single upstream attempt is claimed.
 
+The secure CA-bundle update from `6c8e416` uses pinned `certifi==2026.7.22`
+for the shared HTTPS transport. Certificate and hostname verification remain
+enabled. The operator reported that certifi resolved a local issuer-chain TLS
+failure in a separate unauthenticated handshake diagnostic. This integration
+was tested offline only; authenticated provider compatibility remains unverified.
+
 The offline provider readiness audit starts at clean checkpoint `39cc3a0`.
 See [provider requirements, compatibility gaps and the bounded future live-test
 plan](docs/provider_readiness.md). Both required credentials were absent from
@@ -370,6 +376,20 @@ This bounds client attempts only. Mesh gateway retries/fallback require a
 separately verified per-key policy; the live-test plan specifies the gate.
 
 ## Public-source retrieval
+
+HTTPS connections use `ssl.create_default_context(cafile=certifi.where())`.
+Python's secure defaults retain `CERT_REQUIRED` and hostname checking; the
+original hostname supplies TLS SNI while connections remain pinned to a validated
+public IP. Brave, Mesh and HTTPS source retrieval share this transport. Missing
+or invalid CA bundles fail closed, without retrying with an unverified context.
+No custom CA path, trust-store environment override or insecure TLS option is
+introduced. Injected transports remain the caller's explicit responsibility.
+
+The CA bundle is a pinned project dependency for reproducible installation.
+Review and update the pin deliberately as trust roots change. Enterprise/private
+roots available only in the Windows trust store may not be in certifi; such
+failures require a separately reviewed trust policy, never disabled verification.
+No live provider request was made to validate this change.
 
 `HTTPWebRetriever.fetch(url)` performs a GET only when explicitly called. It
 accepts HTTP/HTTPS on standard ports, rejects credentials, malformed URLs,

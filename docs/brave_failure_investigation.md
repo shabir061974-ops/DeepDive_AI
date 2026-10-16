@@ -6,6 +6,36 @@ response, unknown potentially billable cost, zero Mesh attempts and no preflight
 blockers. No further live provider calls or credential inspection were performed
 during this investigation. Only source files and mocked fixtures were inspected.
 
+## Subsequent operator diagnostic and CA-bundle integration
+
+After the historical investigation below, the operator reported a default Python
+TLS failure (`unable to get local issuer certificate`) and a successful separate
+TLS 1.3 handshake to Brave using `ssl.create_default_context(cafile=certifi.where())`,
+with certificate and hostname verification enabled and no authenticated API call.
+That operator-provided diagnostic identifies a certificate trust-chain problem
+in the default context; it was not rerun during implementation.
+
+From clean checkpoint `6c8e416`, the shared HTTPS connection now selects certifi's
+bundle explicitly and declares `certifi==2026.7.22` in project dependencies. The
+installed virtual-environment version matches that pin. Brave and Mesh use this
+same transport by default, as does HTTPS source retrieval. No verification,
+request bounds, retry policy, timeout, spending control or SSRF check was relaxed.
+Missing bundles and certificate/hostname failures close the socket and fail
+without an insecure fallback. Offline tests mock all sockets and TLS handshakes;
+they inspect real local context defaults without contacting a server.
+
+This change addresses the reported local trust selection problem. It does not
+prove authenticated Brave/Mesh compatibility or successful live retrieval.
+Pinned roots require maintenance, and private enterprise roots may need a
+separately reviewed trust policy. Await SPA review before any further live test.
+
+CA-integration validation: all 168 offline tests passed in 7.848 seconds, with
+zero failures/errors/skips (163 existing unchanged, five new). Compilation of
+`src`, `tests` and `main.py`, TOML dependency validation, `git diff --check` and
+new-file whitespace checks passed. Six files are modified/new, nothing staged;
+HEAD remains `6c8e416`. No live requests, installs, commits, pushes or deployments
+were performed during integration.
+
 ## What the original result establishes
 
 The endpoint remains pinned to
