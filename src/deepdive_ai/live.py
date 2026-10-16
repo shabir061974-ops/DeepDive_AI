@@ -32,6 +32,19 @@ PROFILE = {"mesh_requests": 7, "brave_requests": 2, "source_requests": 4,
            "overall_timeout_seconds": 120}
 
 
+# Display policy only: never consult this set when accepting a response model.
+_PUBLIC_MODEL_DISPLAY_IDS = frozenset({"google/gemini-2.5-flash", "gemini-2.5-flash"})
+
+
+def _model_identity_diagnostics(data: dict) -> dict:
+    present = "model" in data
+    value = data.get("model")
+    label = {type(None): "null", bool: "boolean", int: "number", float: "number",
+             str: "string", list: "array", dict: "object"}.get(type(value), "unavailable")
+    return {"model_field_present": present, "model_field_type": label if present else "missing",
+            "public_model_identifier": value if type(value) is str and value in _PUBLIC_MODEL_DISPLAY_IDS else None}
+
+
 @dataclass(frozen=True)
 class LiveOptions:
     question: str = field(repr=False)
@@ -77,6 +90,7 @@ class ObservedTransport:
     async def send(self, request: HTTPRequest) -> HTTPResponse:
         self.attempts += 1
         validation_checks = None
+        model_diagnostics = None
         hostname = None
         if self.source_diagnostics:
             try:
@@ -99,12 +113,15 @@ class ObservedTransport:
                 # This runner additionally requires the selected model and bounded usage.
                 validation_checks = dict.fromkeys(("response_json_valid", "root_object", "model_matches",
                     "usage_object", "token_fields_valid", "token_total_matches", "output_limit_satisfied"), False)
+                model_diagnostics = {"model_field_present": False, "model_field_type": "unavailable",
+                                     "public_model_identifier": None}
                 try:
                     data = json.loads(response.body.decode("utf-8"))
                     validation_checks["response_json_valid"] = True
                     validation_checks["root_object"] = isinstance(data, dict)
                     if not isinstance(data, dict):
                         raise ValueError
+                    model_diagnostics = _model_identity_diagnostics(data)
                     validation_checks["model_matches"] = data.get("model") == self.model
                     usage = data.get("usage")
                     validation_checks["usage_object"] = isinstance(usage, dict)
@@ -129,6 +146,7 @@ class ObservedTransport:
                                   "http_status": error.http_status}, hostname)
             if error.category == FailureCategory.VALIDATION and validation_checks is not None:
                 self.failure["mesh_validation_checks"] = validation_checks
+                self.failure.update(model_diagnostics)
             raise
         except asyncio.CancelledError:
             # wait_for cancels the inner transport before raising TimeoutError

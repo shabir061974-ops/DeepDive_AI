@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,22 +29,24 @@ class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
             guard.start()
             self.addCleanup(guard.stop)
 
-    async def run_second_response(self, mutate):
+    async def run_second_response(self, mutate, *, requested_model=OPTIONS.model):
         class Transport(MeshTransport):
             async def send(self, request):
                 response = await super().send(request)
+                data = json.loads(response.body)
+                data["model"] = requested_model
                 if len(self.calls) == 2:
-                    data = mutate(json.loads(response.body))
-                    body = data if isinstance(data, bytes) else json.dumps(data).encode()
-                    return HTTPResponse(200, response.headers, body)
-                return response
+                    data = mutate(data)
+                body = data if isinstance(data, bytes) else json.dumps(data).encode()
+                return HTTPResponse(200, response.headers, body)
 
         mesh = Transport(plan(), draft, assessment)
         with patch("deepdive_ai.demo.run_demo", side_effect=AssertionError("No fixture fallback")):
-            result = await run_live(OPTIONS, execute=True, environment=ENV, output_root=self.root,
+            result = await run_live(replace(OPTIONS, model=requested_model), execute=True, environment=ENV, output_root=self.root,
                 mesh_transport=mesh, brave_transport=SearchTransport((URL,)), source_transport=SourceTransport())
         roles = [json.loads(json.loads(request.body)["messages"][0]["content"])["role"] for request in mesh.calls]
         self.assertEqual(roles[:2], ["planner", "drafter"])
+        self.assertTrue(all(json.loads(request.body)["model"] == requested_model for request in mesh.calls))
         folder = self.root / result["run_id"]
         self.assertEqual(json.loads((folder / "outcome.json").read_text()), result)
         audit = [json.loads(line)["kind"] for line in (folder / "audit.jsonl").read_text().splitlines()]
@@ -112,3 +115,70 @@ class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("mesh", result["diagnostics"])
         self.assertEqual(audit[-1], "failed")
         self.assertFalse((folder / "report.json").exists())
+
+    async def test_public_identifiers_are_displayed_without_becoming_accepted_aliases(self):
+        for identifier in ("google/gemini-2.5-flash", "gemini-2.5-flash"):
+            with self.subTest(identifier=identifier):
+                result, _, folder = await self.run_second_response(lambda data: {**data, "model": identifier})
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(result["failure_category"], "response_validation")
+                self.assertEqual(result["attempts"], {"mesh": 2, "brave": 1, "source": 1})
+                metadata = result["diagnostics"]["mesh"]
+                self.assertTrue(metadata["model_field_present"])
+                self.assertEqual(metadata["model_field_type"], "string")
+                self.assertEqual(metadata["public_model_identifier"], identifier)
+                self.assertFalse(metadata["mesh_validation_checks"]["model_matches"])
+                self.assertFalse((folder / "report.json").exists())
+
+    async def test_unrecognized_model_strings_are_redacted_without_normalization(self):
+        for value in (PRIVATE, "Google/gemini-2.5-flash", "gemini-2.5-flash ",
+                      "google/gemini-2.5-flash-001", "x" * 20_000, "private\ncredential"):
+            with self.subTest(length=len(value)):
+                result, _, _ = await self.run_second_response(lambda data: {**data, "model": value})
+                metadata = result["diagnostics"]["mesh"]
+                self.assertTrue(metadata["model_field_present"])
+                self.assertEqual(metadata["model_field_type"], "string")
+                self.assertIsNone(metadata["public_model_identifier"])
+                self.assertNotIn(value, json.dumps(result))
+
+    async def test_missing_and_invalid_model_types_record_only_fixed_labels(self):
+        for value, label in ((None, "null"), (True, "boolean"), (1, "number"), (1.5, "number"),
+                             ([PRIVATE], "array"), ({PRIVATE: PRIVATE}, "object")):
+            with self.subTest(label=label):
+                result, _, _ = await self.run_second_response(lambda data: {**data, "model": value})
+                metadata = result["diagnostics"]["mesh"]
+                self.assertTrue(metadata["model_field_present"])
+                self.assertEqual(metadata["model_field_type"], label)
+                self.assertIsNone(metadata["public_model_identifier"])
+                self.assertEqual(result["status"], "failed")
+        def missing(data):
+            data.pop("model")
+            return data
+        result, _, _ = await self.run_second_response(missing)
+        metadata = result["diagnostics"]["mesh"]
+        self.assertFalse(metadata["model_field_present"])
+        self.assertEqual(metadata["model_field_type"], "missing")
+        self.assertIsNone(metadata["public_model_identifier"])
+
+    async def test_undecodable_document_does_not_claim_model_field_absence(self):
+        result, _, _ = await self.run_second_response(lambda data: b"invalid-" + PRIVATE.encode())
+        metadata = result["diagnostics"]["mesh"]
+        self.assertFalse(metadata["model_field_present"])
+        self.assertEqual(metadata["model_field_type"], "unavailable")
+        self.assertIsNone(metadata["public_model_identifier"])
+
+    async def test_display_allowlist_cannot_accept_short_name_for_prefixed_request(self):
+        requested = "google/gemini-2.5-flash"
+        for returned in (requested, "gemini-2.5-flash"):
+            result, _, _ = await self.run_second_response(lambda data: {**data, "model": returned},
+                                                         requested_model=requested)
+            if returned == requested:
+                self.assertEqual(result["status"], "completed")
+                self.assertEqual(result["report_status"], "verified")
+                self.assertNotIn("mesh", result["diagnostics"])
+            else:
+                self.assertEqual(result["status"], "failed")
+                metadata = result["diagnostics"]["mesh"]
+                self.assertEqual(metadata["public_model_identifier"], returned)
+                self.assertFalse(metadata["mesh_validation_checks"]["model_matches"])
+                self.assertEqual(result["attempts"]["mesh"], 2)
