@@ -1,5 +1,8 @@
 # Phase 9: controlled real-adapter research preparation
 
+For a single source-only diagnostic that uses no Mesh/Brave credentials, see
+the [offline preflight and separately authorized execution commands](source_connectivity.md).
+
 ## Phase 10 source-failure destination diagnostics
 
 Starting at `aa5f1b8`, source-only failure diagnostics now include
