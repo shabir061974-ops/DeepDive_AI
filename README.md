@@ -27,6 +27,22 @@ checker whose behavior could not be reviewed. Do not activate it until the
 official checks and possible provider usage are separately approved. The public
 workflow template was downloaded; no protected checker or provider was called.
 
+## Phase 9 live-run preparation
+
+From clean checkpoint `3dea62b`, `python -m deepdive_ai.live` now provides an
+explicit real-adapter entry point, defaulting to **offline preflight**. It
+requires a question, approved model, both provider credentials, account rates
+and spending/gateway acknowledgements. Only a separately authorized `--execute`
+invocation starts real research. The runner persists metadata audit events and
+private report/outcome JSON under ignored `reports/live/<run-id>/`; no fixture
+fallback exists. See the [exact future command, fixed request limits, diagnostic
+findings and storage limitations](docs/live_research.md).
+
+Live Mesh agent-JSON compatibility and Brave connectivity are still unverified;
+no live run was performed here. The dashboard remains the labeled offline
+fixture demo. GitHub Offline CI success was operator-reported, and its workflow
+is unchanged. The official hackathon checker remains inactive.
+
 ## Phase 6 status
 
 The local dashboard and end-to-end offline fixture demo are implemented from
