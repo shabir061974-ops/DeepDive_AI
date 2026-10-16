@@ -3,6 +3,7 @@
 import asyncio
 import json
 import math
+import re
 from dataclasses import dataclass, fields
 from enum import StrEnum
 
@@ -141,7 +142,8 @@ class MeshJSON:
         self.limits = limits
         self.budget = budget if budget is not None else AgentBudget(limits)
 
-    async def ask(self, role: str, instruction: str, schema: dict, data: dict) -> object:
+    async def ask(self, role: str, instruction: str, schema: dict, data: dict,
+                  *, allow_markdown_fence: bool = False) -> object:
         try:
             prompt = json.dumps({
                 "role": role,
@@ -169,6 +171,13 @@ class MeshJSON:
         if not isinstance(response, MeshResponse):
             raise AgentOutputError("Mesh returned an invalid response record", code=AgentFailureCode.INVALID_RESPONSE)
         raw = text(response.text, self.limits.max_response_chars)
+        if allow_markdown_fence:
+            # One whole-document wrapper only: never search prose for JSON,
+            # complete partial output, or change any field inside the document.
+            fenced = re.fullmatch(r"```(?:json)?\r?\n(.*?)\r?\n```",
+                                  raw.strip(" \t\r\n"), flags=re.DOTALL)
+            if fenced is not None:
+                raw = fenced.group(1)
         try:
             return json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
         except (ValueError, RecursionError):

@@ -152,7 +152,7 @@ class PlannerDrafterTests(OfflineTests):
             with self.subTest(output=output), self.assertRaises(AgentOutputError):
                 await MeshPlannerAgent(self.llm(FakeMesh(output), max_tasks=1)).plan(QUESTION)
 
-    async def test_strict_json_rejects_code_fences_duplicates_nonfinite_and_wrong_root(self):
+    async def test_strict_json_rejects_invalid_fenced_schema_duplicates_nonfinite_and_wrong_root(self):
         for output in ('```json\n{}\n```', '{"tasks":[],"tasks":[]}', '{"tasks":NaN}', 'null', '[]', 'not JSON'):
             with self.subTest(output=output), self.assertRaises(AgentOutputError):
                 await MeshPlannerAgent(self.llm(FakeMesh(output))).plan(QUESTION)

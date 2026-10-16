@@ -1,8 +1,11 @@
 # Phase 10: staged live validation preparation
 
 Latest operator result: Brave separately passed HTTP 200; the Mesh Planner
-probe returned HTTP 200 with `agent_contract_or_runtime_failure`. The exact
-condition remains unknown. The probe below now emits fixed `agent_failure_code`
+probe returned HTTP 200 with `agent_contract_failure` and
+`agent_failure_code: malformed_agent_json`. The actual response format remains
+unknown. A single complete standalone Markdown JSON fence is now supported by
+Planner, with strict schema checks unchanged; another independently authorized
+test is needed to establish live compatibility. The probe below emits fixed `agent_failure_code`
 values for typed contract failures; redefine `$meshJsonScript` from this updated
 block before any separately authorized next attempt. No new live attempt is
 authorized by this update. See [confirmed findings and hypotheses](planner_compatibility.md).

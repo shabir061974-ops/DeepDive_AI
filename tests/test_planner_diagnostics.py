@@ -16,6 +16,29 @@ from test_agents import FakeMesh
 
 
 class PlannerDiagnosticTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fence_support_is_opt_in_and_does_not_change_other_agent_parsing(self):
+        for role in ("planner", "drafter", "verifier"):
+            llm = MeshJSON(FakeMesh('```json\n{"tasks":[]}\n```'), "offline-model", AgentLimits())
+            with self.subTest(role=role), self.assertRaises(AgentOutputError) as error:
+                await llm.ask(role, "instruction", {}, {})
+            self.assertEqual(error.exception.code, AgentFailureCode.MALFORMED_JSON)
+
+    async def test_raw_response_limit_applies_before_fence_removal(self):
+        document = '{"tasks":[{"instruction":"safe"}]}'
+        llm = MeshJSON(FakeMesh("```json\n" + document + "\n```"), "offline-model",
+                       AgentLimits(max_response_chars=len(document)))
+        with self.assertRaises(AgentOutputError) as error:
+            await MeshPlannerAgent(llm).plan(ResearchQuestion("q", "question"))
+        self.assertEqual(error.exception.code, AgentFailureCode.TEXT_LIMIT)
+
+    async def test_fence_unwrapping_preserves_instruction_text_exactly(self):
+        instruction = 'Find the literal ``` marker and Unicode \u03b1 in documentation'
+        document = json.dumps({"tasks": [{"instruction": instruction}]})
+        planner = MeshPlannerAgent(MeshJSON(FakeMesh("```json\n" + document + "\n```"),
+                                            "offline-model", AgentLimits()))
+        tasks = await planner.plan(ResearchQuestion("q", "question"))
+        self.assertEqual(tasks[0].instruction, instruction)
+
     async def test_instruction_character_bound_is_in_prompt_and_still_enforced(self):
         for size in (160, 161):
             mesh = FakeMesh({"tasks": [{"instruction": "x" * size}]})
@@ -78,7 +101,7 @@ class DocumentedPlannerProbeTests(unittest.TestCase):
     def test_http_200_rejection_conditions_are_distinguished_without_exposing_values(self):
         cases = (
             ("OK", "malformed_agent_json"),
-            ('```json\n{"tasks": []}\n```', "malformed_agent_json"),
+            ('```json\n{"tasks": []}\n```', "empty_planner_tasks"),
             ('{"tasks":[],"tasks":[]}', "duplicate_json_keys"),
             ('{"tasks":NaN}', "nonfinite_json_value"),
             ("[]", "object_required"),
@@ -109,6 +132,47 @@ class DocumentedPlannerProbeTests(unittest.TestCase):
         status, result = self.probe(content, execute=False)
         self.assertEqual(status, 0)
         self.assertEqual(result["mode"], "preflight")
+
+    def test_complete_standalone_json_fences_pass_real_probe_and_schema(self):
+        document = '{"tasks":[{"instruction":"Find authoritative documentation"}]}'
+        for content in (document, " \r\n" + document + "\t",
+                        "```json\n" + document + "\n```",
+                        "```\n" + document + "\n```",
+                        " \r\n```json\r\n" + document + "\r\n```\t\r\n"):
+            with self.subTest(content=content):
+                status, result = self.probe(content)
+                self.assertEqual(status, 0)
+                self.assertTrue(result["agent_json_compatible"])
+                self.assertEqual(result["attempts"], 1)
+                self.assertEqual(result["task_count"], 1)
+
+    def test_ambiguous_partial_and_unsupported_wrappers_are_not_repaired(self):
+        document = '{"tasks":[{"instruction":"Find authoritative documentation"}]}'
+        fenced = "```json\n" + document + "\n```"
+        for content in ("Here is JSON:\n" + fenced, fenced + "\nExplanation",
+                        fenced + "\n" + fenced, document + document,
+                        "```json\n" + document, document[:-1],
+                        "```json\n" + document[:-1] + "\n```",
+                        "```javascript\n" + document + "\n```",
+                        "```json " + document + "```", "~~~json\n" + document + "\n~~~"):
+            with self.subTest(content=content):
+                status, result = self.probe(content)
+                self.assertEqual(status, 1)
+                self.assertEqual(result["agent_failure_code"], "malformed_agent_json")
+
+    def test_fenced_documents_keep_strict_json_and_planner_validation(self):
+        for document, code in (
+                ('{"tasks":[],"tasks":[]}', "duplicate_json_keys"),
+                ('{"tasks":NaN}', "nonfinite_json_value"),
+                ('{"tasks":[{}]}', "required_fields_mismatch"),
+                ('{"tasks":[],"extra":0}', "required_fields_mismatch"),
+                ('{"tasks":[{"instruction":""}]}', "invalid_text"),
+                ('{"tasks":[{"instruction":"\\ud800"}]}', "invalid_unicode"),
+                ('{"tasks":[{},{}]}', "list_limit_exceeded")):
+            with self.subTest(code=code):
+                status, result = self.probe("```json\n" + document + "\n```")
+                self.assertEqual(status, 1)
+                self.assertEqual(result["agent_failure_code"], code)
 
     def test_truncated_completion_fails_before_planner_json_acceptance(self):
         status, result = self.probe('{"tasks":[{"instruction":"safe"}]}', finish="length")

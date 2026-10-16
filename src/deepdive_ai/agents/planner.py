@@ -24,7 +24,7 @@ class MeshPlannerAgent:
             f"Each instruction must be a nonempty string of at most {limits.max_text_chars} characters. "
             "Do not answer the question or generate URLs.",
             {"tasks": [{"instruction": "nonempty research query"}]},
-            {"question": question.text}), {"tasks"})
+            {"question": question.text}, allow_markdown_fence=True), {"tasks"})
         rows = bounded_list(result["tasks"], limits.max_tasks)
         if not rows:
             raise AgentOutputError("Planner must return at least one task", code=AgentFailureCode.EMPTY_TASKS)

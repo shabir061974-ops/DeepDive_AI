@@ -16,10 +16,12 @@ agent-JSON compatibility and a complete live five-agent run remain unverified. N
 is claimed. See the [demo rehearsal, YouTube script and submission checklist](docs/submission_readiness.md)
 and [controlled live-run instructions](docs/live_research.md).
 
-The latest Planner probe returned HTTP 200 but failed its contract; the exact
-rejected condition was not retained. [Planner diagnostic findings](docs/planner_compatibility.md)
-explain the new fixed failure codes and the unchanged strict validation. No new
-provider request was made to investigate it.
+The latest operator-reported Planner probe returned HTTP 200 and
+`malformed_agent_json`; the actual response format was not retained. Planner
+now accepts a single complete standalone Markdown JSON fence while preserving
+strict JSON and task-schema validation. [Planner diagnostic findings](docs/planner_compatibility.md)
+explain the scope and remaining uncertainty. This is offline-tested compatibility,
+not a confirmed fix for the live failure; no new provider request was made.
 
 ## Publication and CI readiness
 

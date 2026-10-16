@@ -1,5 +1,58 @@
 # Live Planner compatibility investigation
 
+## Current update: malformed JSON diagnostic at checkpoint fda1182
+
+The second operator-authorized probe reported HTTP 200, one attempt,
+`agent_contract_failure` and `malformed_agent_json`. This establishes rejection
+by the assistant-text JSON decoder after successful completion-envelope parsing.
+No retained response body establishes its exact format. A Markdown fence,
+commentary, incomplete JSON or another syntax error remain hypotheses; none can
+be identified as the live root cause from the fixed code alone.
+
+Offline inspection confirms that `json.loads` previously rejected even a complete
+JSON document wrapped in a Markdown fence. Planner now explicitly opts into
+removing one whole-document wrapper: triple backticks with lowercase `json` or
+no language tag, newline-delimited content and closing triple backticks. LF/CRLF
+and surrounding JSON whitespace are supported. The raw response length and
+Unicode checks still run before unwrapping. The contained document then goes
+through the same strict JSON decoder and exact Planner schema. No content is
+repaired, synthesized, truncated, dropped or selected from multiple candidates.
+Leading/trailing prose, multiple documents/fences, unsupported wrappers and
+incomplete JSON remain rejected. Duplicate keys, nonfinite values, missing/extra
+fields and all existing task/text bounds remain rejected with existing codes.
+An empty task list inside a valid fence now reaches `empty_planner_tasks` instead
+of `malformed_agent_json`; this is an intentional, tested diagnostic refinement.
+
+This is an explicit Planner-only opt-in on `MeshJSON.ask`, disabled by default.
+Drafter/Verifier parsing, research acceptance, evidence verification, audit code,
+request counts, retries, timeouts and spending gates are unchanged. The Mesh
+completion envelope still requires assistant string content and `finish_reason:
+stop`; structured tool responses and truncated output are not reinterpreted.
+There is no verified gateway JSON-mode contract in the retained provider audit,
+so no speculative `response_format` or provider-specific parameter is sent.
+The prompt continues to request plain JSON, not Markdown.
+
+Regression tests exercise the exact documented probe through real Mesh client
+and Planner code with mocked HTTP responses, testing accepted wrappers and
+strict rejection cases, raw length limits, unchanged default parsing and exact
+task-text preservation. Fixtures are authored offline examples, not recordings
+of the live response. **SPA: APPROVED WITH NOTES** for this bounded offline
+compatibility improvement, subject to verification gates. Live compatibility
+remains unverified until a separately authorized one-request probe succeeds.
+Do not retry automatically or advance to full research on failure.
+
+Current verification: **253 offline tests passed in 10.850 seconds**, zero
+failures, errors or skips, including six new regression tests. All six browser
+scenarios, desktop/mobile attribution, Markdown export, Python compilation,
+both JavaScript syntax checks and Git whitespace checks passed. The publication
+scan found no credential-pattern matches or private/generated publication paths
+among 71 project files. The inactive official template and CI workflow are
+unchanged. No live provider request was made. GitHub CI must independently pass
+for the resulting published commit.
+
+The sections below preserve the preceding investigation's historical findings;
+their statement that no wrapper handling was added describes that earlier change.
+
 Started from clean checkpoint `8441680`. The operator reported a separately
 authorized Mesh Planner probe with HTTP 200, one attempt, incompatible agent
 JSON, `agent_contract_or_runtime_failure` and failed status. Brave separately
