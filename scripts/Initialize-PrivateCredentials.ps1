@@ -65,7 +65,8 @@ try {
 } catch {
     # Only local stage and framework type; never emit exception text or inputs.
     $failureType = $_.Exception.GetBaseException().GetType().Name
-    throw ('Private setup failed at ' + $setupStage + ' (' + $failureType + '). Existing files were not overwritten. Any partial file remains restricted; review locally without displaying its contents.')
+    $failureLine = $_.InvocationInfo.ScriptLineNumber
+    throw ('Private setup failed at ' + $setupStage + ' (' + $failureType + '), script line ' + $failureLine + '. Existing files were not overwritten. Any partial file remains restricted; review locally without displaying its contents.')
 } finally {
     if ($null -ne $writer) { $writer.Dispose() }
     if ($null -ne $stream) { $stream.Dispose() }

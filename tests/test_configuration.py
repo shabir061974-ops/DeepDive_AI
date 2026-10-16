@@ -167,7 +167,7 @@ class PublicationConfigurationTests(unittest.TestCase):
             encoded = base64.b64encode((mock_prompt + "& {\n" + script + "\n}").encode("utf-16-le")).decode("ascii")
             command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
             first = subprocess.run(command, capture_output=True, timeout=15, check=False)
-            cause = re.search(rb'Private setup failed at ([a-z_]+) \(([A-Za-z]+)\)', first.stderr)
+            cause = re.search(rb'Private setup failed at ([a-z_]+) \(([A-Za-z]+)\), script line ([0-9]+)', first.stderr)
             safe_cause = cause.group(0).decode() if cause else "Synthetic setup failed; sanitized cause unavailable"
             self.assertEqual(first.returncode, 0, safe_cause)
             original = target.read_bytes()
