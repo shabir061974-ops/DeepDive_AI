@@ -4,6 +4,12 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
 ## Phase 5A status
 
+Phase 5B preparation at checkpoint `6e44a0e` adds an explicit controlled
+connectivity harness, defaulting to offline preflight. See the [PowerShell
+commands, limits, cost inputs and stop conditions](docs/controlled_connectivity.md).
+No live tests have been executed. Existing adapters and the five-agent workflow
+are unchanged; the candidate Mesh model is `google/gemini-2.5-flash`.
+
 The offline provider readiness audit starts at clean checkpoint `39cc3a0`.
 See [provider requirements, compatibility gaps and the bounded future live-test
 plan](docs/provider_readiness.md). Both required credentials were absent from
