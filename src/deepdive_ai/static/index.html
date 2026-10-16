@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>DeepDive AI · Offline research workspace</title>
+  <link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <script src="/static/dashboard.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="DeepDive AI home"><img src="/static/mark.svg" alt="" width="34" height="34"><span>deepdive<span class="brand-ai"> / AI</span></span></a>
+    <div class="sidebar-label">RESEARCH ENVIRONMENT</div>
+    <nav aria-label="Workspace navigation">
+      <button class="nav-link selected" data-view="report"><span class="nav-icon">◈</span> Research workspace</button>
+      <button class="nav-link" data-view="claims"><span class="nav-icon">◇</span> Claim verification</button>
+      <button class="nav-link" data-view="sources"><span class="nav-icon">▤</span> Evidence library</button>
+      <button class="nav-link" data-view="audit"><span class="nav-icon">↳</span> Audit trail</button>
+    </nav>
+    <div class="sidebar-note"><span class="status-dot"></span> Built to question.<br><strong>Designed to verify.</strong><p>Five agents. Traceable evidence.<br>Every accepted claim accountable.</p></div>
+    <div class="sidebar-footer"><span class="small-label">AGENT ARENA 2026</span><p>Track 01 · DeepDive</p><span class="version">Local demonstration · Phase 6</span></div>
+  </aside>
+
+  <div class="app-shell">
+    <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong>Research lab</strong></div><div class="environment"><span class="status-dot"></span> Local workspace <span class="divider">|</span><span class="tag amber">Fixture mode</span></div></header>
+    <main id="workspace">
+      <section class="hero"><div><div class="eyebrow">SELF-VERIFYING RESEARCH ANALYST</div><h1>Deep research.<br><span>Visible reasoning.</span></h1><p>Follow the evidence from a question to a verified claim.<br class="desktop-break"> Inspect every decision along the way.</p></div><div class="hero-symbol" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><img src="/static/mark.svg" alt="" width="75" height="75"><span class="orbit-point"></span></div></section>
+
+      <div class="offline-banner"><span class="banner-icon" aria-hidden="true">◉</span><div><strong>OFFLINE FIXTURE DEMO — NO LIVE RESEARCH</strong><p>Authored source fixtures + scripted model assessments. Real backend workflow. No external API calls.</p></div><span class="tag">Explicit demo mode</span></div>
+
+      <section class="workspace-card" aria-labelledby="question-title">
+        <div class="section-heading"><h2 id="question-title"><span class="number-label">01</span> Research workspace</h2><span class="small-label">CONTROLLED SCENARIOS</span></div>
+        <div class="question-label">RESEARCH QUESTION <span>Read-only fixture question</span></div>
+        <p class="question" id="question">Loading offline scenarios…</p>
+        <div class="run-controls"><div class="scenario-control"><label for="scenario">Choose a fixture scenario</label><select id="scenario" disabled><option>Loading scenarios…</option></select><p id="scenario-description">Connecting to the local demo backend.</p></div><button id="run" class="button primary" disabled><span aria-hidden="true">▶</span> Run offline demo</button></div>
+        <div id="error" class="error-message" role="alert" hidden></div>
+      </section>
+
+      <section class="workflow-section" aria-labelledby="workflow-title"><div class="section-heading"><h2 id="workflow-title"><span class="number-label">02</span> Agent workflow</h2><div class="run-status" id="run-status" aria-live="polite">Ready to start</div></div><div class="agent-grid" id="agents"></div><div class="workflow-footer"><span id="progress-label">Agent states update from actual execution events.</span><progress id="workflow-progress" max="5" value="0" aria-label="Agent types completed"></progress></div></section>
+
+      <section class="results-section" aria-labelledby="results-title"><div class="section-heading"><h2 id="results-title"><span class="number-label">03</span> Research intelligence</h2><button class="button secondary" id="export" disabled><span aria-hidden="true">↓</span> Export Markdown</button></div>
+        <div class="results-grid"><div class="results-main"><div class="tabs" role="tablist" aria-label="Research output"><button id="tab-report" role="tab" data-view="report" aria-selected="true" aria-controls="panel-report">Report</button><button id="tab-claims" role="tab" data-view="claims" aria-selected="false" aria-controls="panel-claims" tabindex="-1">Verification <span id="claims-count">—</span></button><button id="tab-sources" role="tab" data-view="sources" aria-selected="false" aria-controls="panel-sources" tabindex="-1">Evidence <span id="sources-count">—</span></button><button id="tab-audit" role="tab" data-view="audit" aria-selected="false" aria-controls="panel-audit" tabindex="-1">Audit trail</button></div>
+          <section id="panel-report" class="tab-panel" role="tabpanel" aria-labelledby="tab-report"><div id="report-content"></div></section>
+          <section id="panel-claims" class="tab-panel" role="tabpanel" aria-labelledby="tab-claims" hidden><div id="claims-content"></div></section>
+          <section id="panel-sources" class="tab-panel" role="tabpanel" aria-labelledby="tab-sources" hidden><div id="sources-content"></div></section>
+          <section id="panel-audit" class="tab-panel" role="tabpanel" aria-labelledby="tab-audit" hidden><div id="audit-content"></div></section>
+        </div>
+        <aside class="inspector"><div class="inspector-heading"><span class="status-dot"></span><h3>Run overview</h3></div><div id="overview"></div><div class="integrity-note"><span class="integrity-icon">◇</span><h4>Evidence before assertion</h4><p>Only accepted claims enter the report. Rejected and uncertain claims remain available for inspection.</p></div><div class="evaluation-note"><h4>Evaluation transparency</h4><p>Counts come from this run. Verification assessments are scripted. No model accuracy score or benchmark result is claimed.</p></div></aside></div>
+      </section>
+      <footer class="page-footer"><span>DeepDive AI <span class="muted">/</span> Self-verifying research, made inspectable.</span><span>No live research · No provider credentials needed</span></footer>
+    </main>
+  </div>
+</body>
+</html>

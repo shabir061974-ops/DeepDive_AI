@@ -1,0 +1,10 @@
+{
+  "notice": "Authored offline fixtures reused from tests/test_agents.py. Not real research findings.",
+  "question": "How many tokens does offline fixture A record?",
+  "instruction": "Find the token count in the offline fixture",
+  "source_a_url": "https://fixture.invalid/a",
+  "source_b_url": "https://fixture.invalid/b",
+  "source_a_text": "Offline fixture A records 12 tokens.",
+  "counter_text": "Offline fixture A records 7 tokens, not 12.",
+  "fixture_timestamp": "2026-10-15T00:00:00+00:00"
+}

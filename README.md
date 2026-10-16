@@ -2,7 +2,38 @@
 
 Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
-## Phase 5A status
+## Phase 6 status
+
+The local dashboard and end-to-end offline fixture demo are implemented from
+clean checkpoint `1ff0e5b`. Start the installed backend from PowerShell:
+
+```powershell
+Set-Location -LiteralPath 'D:\Developments\DeepDive_AI'
+.\.venv\Scripts\python.exe -m uvicorn deepdive_ai.api:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+Open **http://127.0.0.1:8000/**. No API keys, Node build, external fonts, CDN or
+live provider services are needed. Keep the server bound to loopback; stop it
+with Ctrl+C. FastAPI and uvicorn are the existing optional `backend` dependencies
+and are already installed in the project environment.
+
+The dashboard is permanently labeled **OFFLINE FIXTURE DEMO — NO LIVE RESEARCH**.
+Six fixed scenarios execute all available steps through the real five-agent
+workflow: supported evidence, direct contradiction, conflicting sources, evidence
+gap recovery, empty evidence and malformed assessment. Agent starts/completions
+and audit events stream from actual execution; no delays or timing figures are
+invented. Inspect accepted claims, the verification/contradiction ledger, prior
+rounds, evidence/provenance, research-again loops, computed run counts and a
+Markdown download. There is no arbitrary-question or live-research route.
+
+Evidence bytes and scripted model responses reuse the authored fixtures from
+`tests/test_agents.py`. Exact source hashes are calculated locally and fixture
+timestamps are explicitly synthetic. Verification runs the existing strict
+schemas and contradiction vetoes, but scripted assessments are not independent
+model accuracy evaluation. Counts are not benchmark scores. See the
+[Phase 6 runbook, security boundaries and verification](docs/phase6_dashboard.md).
+
+### Earlier provider checkpoints
 
 Phase 5B preparation at checkpoint `6e44a0e` adds an explicit controlled
 connectivity harness, defaulting to offline preflight. See the [PowerShell
@@ -114,12 +145,18 @@ ResearchQuestion
   original-byte digest validation and explicit byte-range evidence extraction.
 - `src/deepdive_ai/http_transport.py`: shared bounded HTTP client, public URL/DNS
   policy, and IP-pinned socket transport with TLS certificate/hostname validation.
-- `src/deepdive_ai/api.py`: optional FastAPI factory with a `/health` endpoint
-  reporting `{"status": "ok", "phase": "foundation"}`. This is process health,
-  not research readiness. No research HTTP endpoint is exposed. The Phase 1 health
+- `src/deepdive_ai/api.py`: local FastAPI dashboard, fixed-scenario catalog and
+  streamed offline demo runs. `/health` still reports
+  `{"status": "ok", "phase": "foundation"}`. This is process health,
+  not live research readiness. No live research HTTP endpoint is exposed. The Phase 1 health
   payload, greeting behavior and agent protocol signatures remain unchanged.
   Phase 1/2 validation and bounded retries remain intact. All 104 earlier tests
   continue to run unchanged. Disabled Phase 1 adapters remain available and disabled.
+- `src/deepdive_ai/demo.py`, `fixtures/research.json`: explicitly scripted fixture
+  dependencies injected into the existing coordinator and concrete agents; actual
+  execution/audit records, computed counts and a canonical report-derived export.
+- `src/deepdive_ai/static/`: responsive dark dashboard using local HTML/CSS/JS/SVG,
+  streamed run progress, report, claim/contradiction filters, evidence and audit views.
 
 ## Concrete research agents
 
@@ -533,12 +570,13 @@ Official Mesh wire-format/model confirmation and explicitly authorized live
 integration tests; additional discovery providers and search quality evaluation;
 browser-rendered HTML, OCR and better PDF layout/relevance selection; independent
 semantic accuracy evaluation, source-quality assessment and completeness checking;
-persistent evidence/audit storage; research endpoints, authentication and UI;
+persistent evidence/audit storage; authenticated live research endpoints and accounts;
 deployment. Prompts separate untrusted data and forbid embedded instructions, and
 strict schemas/citation/quote checks constrain output, but prompt injection and
 semantic misclassification remain model risks. No live source or model accuracy
 claim is made. The workflow is not started by the greeting or health endpoint.
 
-Phase 4 is checkpointed at `39cc3a0`. Phase 5A audit/configuration changes and seven
-new offline tests remain uncommitted pending SPA review. No live integration or
-later-phase application work is included.
+Phase 6 dashboard changes remain uncommitted pending review from `1ff0e5b`.
+PDF export, persistent run history and live provider operation are deferred.
+The dashboard is a local fixture demonstration, not an authenticated production
+service. No live provider integration, push or deployment was performed.
