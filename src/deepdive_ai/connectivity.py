@@ -20,15 +20,16 @@ MODEL = "google/gemini-2.5-flash"
 
 @dataclass(frozen=True)
 class TestOptions:
-    routing_confirmed: bool = False
+    gateway_risk_accepted: bool = False
     mesh_version: str | None = None
     mesh_input_rate: Decimal | None = None
     mesh_output_rate: Decimal | None = None
     brave_request_rate: Decimal | None = None
+    spending_confirmed: bool = False
 
     def __post_init__(self) -> None:
-        if type(self.routing_confirmed) is not bool:
-            raise ValueError("Invalid routing confirmation")
+        if type(self.gateway_risk_accepted) is not bool or type(self.spending_confirmed) is not bool:
+            raise ValueError("Invalid safety acknowledgement")
         if self.mesh_version is not None and (
             not isinstance(self.mesh_version, str)
             or re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", self.mesh_version) is None
@@ -66,33 +67,49 @@ class _Observation:
     def status(self) -> int | None:
         return self._response.status if self._response is not None else None
 
-    def mesh_metadata(self, version: str) -> tuple[bool, dict[str, int] | None]:
+    def mesh_metadata(self, version: str | None) -> tuple[bool, dict[str, int] | None, dict]:
         response = self._response
         if response is None:
-            return False, None
+            return False, None, {}
         # Called only after MeshAPIClient has validated the JSON and completion.
         data = json.loads(response.body.decode("utf-8"))
-        compatible = (
-            data.get("model") == MODEL
-            and response.header("X-Mesh-Routing-Attempts") == "1"
-            and response.header("X-Mesh-Routing-Fallback") == "false"
-            and response.header("X-Mesh-Version") == version
-        )
+        compatible = data.get("model") == MODEL
+        version_matches = None if version is None else response.header("X-Mesh-Version") == version
+        if version_matches is False:
+            compatible = False
+        raw_attempts = response.header("X-Mesh-Routing-Attempts")
+        attempts = (int(raw_attempts) if raw_attempts is not None and len(raw_attempts) <= 6
+                    and raw_attempts.isascii() and raw_attempts.isdecimal() and int(raw_attempts) > 0 else None)
+        raw_fallback = response.header("X-Mesh-Routing-Fallback")
+        fallback = {"true": True, "false": False}.get(raw_fallback)
+        warnings = []
+        if attempts is None:
+            warnings.append("gateway_attempts_unverified")
+        elif attempts > 1:
+            warnings.append("gateway_multiple_attempts_reported")
+        if fallback is None:
+            warnings.append("gateway_fallback_unverified")
+        elif fallback:
+            warnings.append("gateway_fallback_reported")
+        if version is None:
+            warnings.append("mesh_version_not_checked")
+        diagnostics = {"gateway_attempts_reported": attempts, "gateway_fallback_reported": fallback,
+                       "version_matches": version_matches, "warnings": warnings}
         usage = data.get("usage")
         names = ("prompt_tokens", "completion_tokens", "total_tokens")
         if not isinstance(usage, dict) or any(
             type(usage.get(name)) is not int or not 0 <= usage[name] <= 1_000_000_000 for name in names
         ):
-            return compatible, None
+            return compatible, None, diagnostics
         if usage["total_tokens"] != usage["prompt_tokens"] + usage["completion_tokens"]:
-            return compatible, None
-        return compatible, {name: usage[name] for name in names}
+            return compatible, None, diagnostics
+        return compatible, {name: usage[name] for name in names}, diagnostics
 
 
 def _result() -> dict:
     return {"status": "not_run", "http_status": None, "attempts": 0,
             "response_compatible": None, "token_usage": None,
-            "estimated_cost_usd": None, "cost_status": "not_run"}
+            "estimated_cost_usd": None, "cost_status": "not_run", "diagnostics": {}}
 
 
 async def run_connectivity(
@@ -112,10 +129,10 @@ async def run_connectivity(
         brave_settings = BraveSearchSettings.from_environment(values, policy=_policy(10))
     except Exception:
         blockers.append("brave_credential_missing_or_invalid")
-    if not options.routing_confirmed:
-        blockers.append("mesh_single_attempt_no_fallback_policy_not_confirmed")
-    if options.mesh_version is None:
-        blockers.append("approved_mesh_version_required")
+    if not options.gateway_risk_accepted:
+        blockers.append("gateway_uncertainty_not_accepted")
+    if not options.spending_confirmed:
+        blockers.append("approved_spend_controls_not_confirmed")
     if any(rate is None for rate in (options.mesh_input_rate, options.mesh_output_rate, options.brave_request_rate)):
         blockers.append("approved_account_prices_required")
     report["ready"] = not blockers
@@ -139,14 +156,14 @@ async def run_connectivity(
             observer = mesh
             active.update(status="failed", cost_status="unknown_failure_may_be_billable")
             response = await MeshAPIClient(mesh_settings, mesh).complete(MeshRequest(MODEL, "Reply exactly OK.", 64))
-            compatible, usage = mesh.mesh_metadata(options.mesh_version)
+            compatible, usage, diagnostics = mesh.mesh_metadata(options.mesh_version)
             compatible = compatible and response.text.strip() == "OK"
             # A provider violating the requested output cap is not a passing test.
             compatible = compatible and (usage is None or usage["completion_tokens"] <= 64)
-            active.update(response_compatible=compatible, token_usage=usage)
+            active.update(response_compatible=compatible, token_usage=usage, diagnostics=diagnostics)
             if compatible:
                 active["status"] = "passed"
-                active["cost_status"] = "usage_unavailable" if usage is None else "estimate_not_invoice"
+                active["cost_status"] = "usage_unavailable" if usage is None else "response_usage_estimate_not_total_bill"
                 if usage is not None:
                     cost = (usage["prompt_tokens"] * options.mesh_input_rate
                             + usage["completion_tokens"] * options.mesh_output_rate) / Decimal(1_000_000)
@@ -174,16 +191,18 @@ def _rate(value: str) -> Decimal:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="Make up to one request per provider; may incur charges")
-    parser.add_argument("--confirm-routing", action="store_true",
-                        help="Attest key policy: one upstream attempt, no fallback, gateway latency at most 10 seconds")
-    parser.add_argument("--mesh-version", help="Approved effective key version, YYYY-MM")
+    parser.add_argument("--accept-gateway-uncertainty", action="store_true",
+                        help="Accept that client limits cannot bound gateway attempts, latency or billing")
+    parser.add_argument("--confirm-spend-controls", action="store_true",
+                        help="Attest account prices, approved spend exposure and provider spending controls were reviewed")
+    parser.add_argument("--mesh-version", help="Optional expected effective version, YYYY-MM; validation only, not authentication")
     parser.add_argument("--mesh-input-usd-per-million", type=_rate)
     parser.add_argument("--mesh-output-usd-per-million", type=_rate)
     parser.add_argument("--brave-usd-per-request", type=_rate)
     args = parser.parse_args()
     try:
-        options = TestOptions(args.confirm_routing, args.mesh_version, args.mesh_input_usd_per_million,
-                              args.mesh_output_usd_per_million, args.brave_usd_per_request)
+        options = TestOptions(args.accept_gateway_uncertainty, args.mesh_version, args.mesh_input_usd_per_million,
+                              args.mesh_output_usd_per_million, args.brave_usd_per_request, args.confirm_spend_controls)
         report = asyncio.run(run_connectivity(options, execute=args.execute))
     except KeyboardInterrupt:
         print('{"status":"interrupted","cost_status":"unknown_may_be_billable"}')

@@ -9,6 +9,10 @@ connectivity harness, defaulting to offline preflight. See the [PowerShell
 commands, limits, cost inputs and stop conditions](docs/controlled_connectivity.md).
 No live tests have been executed. Existing adapters and the five-agent workflow
 are unchanged; the candidate Mesh model is `google/gemini-2.5-flash`.
+The blocker review from `af7926d` makes version checks optional and treats gateway
+headers as diagnostics. Client request bounds remain strict; live mode requires
+approved account prices plus explicit gateway-risk and spending acknowledgements.
+No local hard dollar ceiling or single upstream attempt is claimed.
 
 The offline provider readiness audit starts at clean checkpoint `39cc3a0`.
 See [provider requirements, compatibility gaps and the bounded future live-test

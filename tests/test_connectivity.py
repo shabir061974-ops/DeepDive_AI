@@ -14,7 +14,7 @@ from deepdive_ai.http_transport import HTTPResponse, _PinnedConnection
 
 
 ENV = {"MESH_API_KEY": "offline-mesh-secret", "BRAVE_SEARCH_API_KEY": "offline-brave-secret"}
-OPTIONS = TestOptions(True, "2026-08", Decimal("0.3"), Decimal("2.5"), Decimal("0.005"))
+OPTIONS = TestOptions(True, "2026-08", Decimal("0.3"), Decimal("2.5"), Decimal("0.005"), True)
 JSON_HEADERS = (("Content-Type", "application/json"),)
 MESH_HEADERS = JSON_HEADERS + (("X-Mesh-Routing-Attempts", "1"),
                               ("X-Mesh-Routing-Fallback", "false"), ("X-Mesh-Version", "2026-08"))
@@ -67,8 +67,8 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_credentials_or_gates_prevent_all_requests(self):
         for options, environment in ((OPTIONS, {}), (TestOptions(), ENV),
-                                     (replace(OPTIONS, routing_confirmed=False), ENV),
-                                     (replace(OPTIONS, mesh_version=None), ENV),
+                                     (replace(OPTIONS, gateway_risk_accepted=False), ENV),
+                                     (replace(OPTIONS, spending_confirmed=False), ENV),
                                      (replace(OPTIONS, mesh_input_rate=None), ENV),
                                      (OPTIONS, dict(ENV, MESH_API_KEY="bad\r\nvalue"))):
             report, brave, mesh = await self.run_fixture(options=options, environment=environment)
@@ -116,17 +116,54 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(report["brave"]["status"], "failed")
             self.assertEqual(len(mesh.calls), 0)
 
-    async def test_mesh_missing_or_unapproved_metadata_is_inconclusive_failure(self):
+    async def test_model_and_explicit_version_checks_remain_strict(self):
         for response in (mesh_response(model="another-model"), mesh_response(headers=JSON_HEADERS),
                          mesh_response(headers=JSON_HEADERS + (("X-Mesh-Routing-Attempts", "2"),)),
-                         mesh_response(headers=MESH_HEADERS[:-1] + (("X-Mesh-Version", "2026-09"),)),
-                         mesh_response(headers=(JSON_HEADERS + (("X-Mesh-Routing-Attempts", "1"),
-                                      ("X-Mesh-Routing-Fallback", "true"), ("X-Mesh-Version", "2026-08"))))):
+                         mesh_response(headers=MESH_HEADERS[:-1] + (("X-Mesh-Version", "2026-09"),))):
             report, _, mesh = await self.run_fixture(mesh=Transport(response))
             self.assertEqual(report["mesh"]["status"], "failed")
             self.assertFalse(report["mesh"]["response_compatible"])
             self.assertIsNone(report["mesh"]["estimated_cost_usd"])
             self.assertEqual(len(mesh.calls), 1)
+
+    async def test_no_version_or_routing_headers_needed_for_connectivity(self):
+        report, brave, mesh = await self.run_fixture(
+            options=replace(OPTIONS, mesh_version=None), mesh=Transport(mesh_response(headers=JSON_HEADERS)))
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["mesh"]["status"], "passed")
+        self.assertEqual(report["mesh"]["diagnostics"], {
+            "gateway_attempts_reported": None, "gateway_fallback_reported": None, "version_matches": None,
+            "warnings": ["gateway_attempts_unverified", "gateway_fallback_unverified", "mesh_version_not_checked"],
+        })
+        self.assertNotIn("X-Mesh-Version", dict(mesh.calls[0].headers))
+        self.assertEqual((len(brave.calls), len(mesh.calls)), (1, 1))
+
+    async def test_gateway_activity_is_reported_without_claiming_local_control(self):
+        headers = JSON_HEADERS + (("X-Mesh-Routing-Attempts", "3"), ("X-Mesh-Routing-Fallback", "true"))
+        report, _, mesh = await self.run_fixture(options=replace(OPTIONS, mesh_version=None),
+                                                 mesh=Transport(mesh_response(headers=headers)))
+        self.assertEqual(report["mesh"]["status"], "passed")
+        self.assertEqual(report["mesh"]["attempts"], 1)
+        self.assertEqual(report["mesh"]["diagnostics"]["gateway_attempts_reported"], 3)
+        self.assertIn("gateway_fallback_reported", report["mesh"]["diagnostics"]["warnings"])
+        self.assertEqual(report["mesh"]["cost_status"], "response_usage_estimate_not_total_bill")
+        self.assertEqual(len(mesh.calls), 1)
+
+    async def test_invalid_gateway_metadata_never_echoes_raw_values(self):
+        for attempts in ("-1", "0", "9999999", "sensitive-header", "١"):
+            headers = JSON_HEADERS + (("X-Mesh-Routing-Attempts", attempts),
+                                      ("X-Mesh-Routing-Fallback", "sensitive-header"))
+            report, _, _ = await self.run_fixture(options=replace(OPTIONS, mesh_version=None),
+                                                  mesh=Transport(mesh_response(headers=headers)))
+            self.assertEqual(report["mesh"]["status"], "passed")
+            self.assertIsNone(report["mesh"]["diagnostics"]["gateway_attempts_reported"])
+            self.assertNotIn("sensitive-header", json.dumps(report))
+
+    async def test_new_acknowledgements_cannot_replace_required_prices(self):
+        options = TestOptions(gateway_risk_accepted=True, spending_confirmed=True)
+        report, brave, mesh = await self.run_fixture(options=options)
+        self.assertIn("approved_account_prices_required", report["blockers"])
+        self.assertEqual(brave.calls + mesh.calls, [])
 
     async def test_missing_or_invalid_usage_never_becomes_a_cost_estimate(self):
         for usage in (None, {}, {"prompt_tokens": True, "completion_tokens": 2, "total_tokens": 3},
@@ -168,6 +205,19 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CommandTests(unittest.TestCase):
+    def test_revised_cli_needs_no_version_and_remains_offline_by_default(self):
+        arguments = ["connectivity", "--accept-gateway-uncertainty", "--confirm-spend-controls",
+                     "--mesh-input-usd-per-million", "0.3", "--mesh-output-usd-per-million", "2.5",
+                     "--brave-usd-per-request", "0.005"]
+        with patch.dict("os.environ", ENV, clear=True), patch("sys.argv", arguments), \
+                patch("deepdive_ai.connectivity.PublicHTTPTransport", side_effect=AssertionError("No transport allowed")), \
+                redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(main(), 0)
+        report = json.loads(output.getvalue())
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["mode"], "preflight")
+        self.assertEqual(report["mesh"]["attempts"] + report["brave"]["attempts"], 0)
+
     def test_default_cli_is_offline_and_missing_configuration_is_safe(self):
         with patch.dict("os.environ", {}, clear=True), patch("sys.argv", ["connectivity"]), \
                 patch("socket.getaddrinfo", side_effect=AssertionError("Live DNS forbidden")), \
@@ -178,6 +228,7 @@ class CommandTests(unittest.TestCase):
     def test_invalid_versions_and_rates_are_rejected(self):
         for changes in ({"mesh_version": "2026-13"}, {"mesh_input_rate": Decimal("NaN")},
                         {"mesh_output_rate": Decimal("-1")}, {"brave_request_rate": Decimal("Infinity")},
-                        {"mesh_input_rate": Decimal("1e-10000")}, {"brave_request_rate": Decimal("0e+999999")}):
+                        {"mesh_input_rate": Decimal("1e-10000")}, {"brave_request_rate": Decimal("0e+999999")},
+                        {"gateway_risk_accepted": 1}, {"spending_confirmed": "yes"}):
             with self.assertRaises(ValueError):
                 replace(OPTIONS, **changes)

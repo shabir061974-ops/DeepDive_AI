@@ -1,5 +1,60 @@
 # Phase 5A provider readiness audit
 
+## Phase 5B blocker review, 2026-10-16
+
+Reviewed from clean checkpoint `af7926d`. The Phase 5A findings below are a
+historical audit. Its mandatory version and single-upstream-attempt gates were
+internal policies, not authentication requirements, and are superseded by the
+[current controlled-test policy and commands](controlled_connectivity.md).
+No credentials were accessed during this review and no provider API was called.
+
+The [versioning reference](https://developers.meshapi.ai/docs/reference/api-versioning)
+explicitly supports requests without a version header: the key pin, then the
+baseline, determine the contract. An expected version is useful for strict
+validation but not required for bearer authentication. The harness now makes it
+optional; supplying one still enforces a match. It does not send a version header.
+
+The [routing reference](https://developers.meshapi.ai/docs/platform/retry-and-fallback)
+distinguishes client calls from internal gateway attempts and describes routing
+as best effort. It states failed attempts are not billed and different-model
+fallback is charged at the substitute's rate. These are provider statements,
+not locally enforceable promises. Missing routing headers no longer invalidate
+chat compatibility; sanitized diagnostics retain uncertainty. A mismatched or
+missing served model still fails, and no estimate is made at the requested
+model's rate after a substitution. Post-response detection cannot undo a charge.
+
+The [spend-limit reference](https://developers.meshapi.ai/docs/getting-started/rate-limits)
+warns that unset caps are unlimited and settlement can exceed a cap by the final
+request. No local timeout, token parameter or acknowledgement flag can establish
+a hard dollar ceiling. Execution still requires account-approved prices and
+confirmation of reviewed spending controls/exposure, including overrun risk.
+If an absolute ceiling or exactly one upstream attempt is mandatory, Mesh
+execution remains blocked with this interface.
+
+Pricing was rechecked using public authoritative pages only:
+
+- [Brave Search](https://brave.com/search/api/) advertises $5/1,000 requests
+  ($0.005 per request) and monthly credits. Account terms/remaining credit were
+  not inspected; free usage is not assumed.
+- [Mesh pricing](https://developers.meshapi.ai/docs/getting-started/pricing)
+  explains prepaid per-model input/output pricing but provides no confirmed
+  numeric quote for this candidate. The [model reference](https://developers.meshapi.ai/docs/reference/models)
+  identifies catalog pricing fields. No catalog API was called, including public
+  catalog endpoints; Mesh-specific model availability/rates remain unverified.
+- [Google's direct API pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-flash)
+  lists standard Gemini 2.5 Flash text input at $0.30/million and output,
+  including thinking tokens, at $2.50/million. This is a reference for Google's
+  own service, **not a verified Mesh quote**. It is not installed as a default.
+  The Mesh meaning of `max_tokens` for thinking remains an unverified mapping.
+
+The smallest implementation change is confined to the connectivity harness:
+replace the unverifiable routing attestation with explicit gateway-risk and
+spending acknowledgements, make version comparison optional, and separate
+compatibility from diagnostic gateway metadata. Adapters, URL/TLS protections,
+body caps, zero retries and per-invocation client request budgets remain intact.
+
+## Original Phase 5A record
+
 Audited 2026-10-15 from clean checkpoint `39cc3a0`. This is an offline readiness
 audit, not evidence of successful live integration. Only public documentation
 pages were consulted; no inference, search API, catalog, balance or account API
