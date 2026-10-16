@@ -21,7 +21,9 @@ def _check_permissions(path: Path) -> None:
         # Metadata only: never read contents or echo accounts, rules or errors.
         script = r"""& { param([string]$Target)
 try {
-  $acl = Get-Acl -LiteralPath $Target -ErrorAction Stop
+  $file = [System.IO.FileInfo]::new($Target)
+  $sections = [System.Security.AccessControl.AccessControlSections]::Access -bor [System.Security.AccessControl.AccessControlSections]::Owner
+  $acl = $file.GetAccessControl($sections)
   $current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $allowed = @($current, 'S-1-5-18', 'S-1-5-32-544')
   if (-not $acl.AreAccessRulesProtected) { exit 1 }

@@ -163,7 +163,7 @@ class PublicationConfigurationTests(unittest.TestCase):
             target = (Path(temporary) / "synthetic.env").resolve()
             script = Path("scripts/Initialize-PrivateCredentials.ps1").read_text()
             script = script.replace("D:\\Developments\\DeepDive_AI.env", str(target))
-            mock_prompt = "function Read-Host { param($Prompt, [switch]$AsSecureString) ConvertTo-SecureString 'offline-setup-fixture' -AsPlainText -Force }; "
+            mock_prompt = "function Read-Host { param($Prompt, [switch]$AsSecureString) $s=[Security.SecureString]::new(); foreach($c in 'offline-setup-fixture'.ToCharArray()) { $s.AppendChar($c) }; $s.MakeReadOnly(); return $s }; "
             encoded = base64.b64encode((mock_prompt + "& {\n" + script + "\n}").encode("utf-16-le")).decode("ascii")
             command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
             first = subprocess.run(command, capture_output=True, timeout=15, check=False)
