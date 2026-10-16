@@ -1,5 +1,12 @@
 # Phase 10: staged live validation preparation
 
+Latest operator result: Brave separately passed HTTP 200; the Mesh Planner
+probe returned HTTP 200 with `agent_contract_or_runtime_failure`. The exact
+condition remains unknown. The probe below now emits fixed `agent_failure_code`
+values for typed contract failures; redefine `$meshJsonScript` from this updated
+block before any separately authorized next attempt. No new live attempt is
+authorized by this update. See [confirmed findings and hypotheses](planner_compatibility.md).
+
 Checkpoint `bd3f9a2` was verified clean before preparation. No live provider,
 source website or other external request was made. Application code, security
 limits, CI and the offline dashboard are unchanged. Developed by Chabir Ahamad
@@ -74,7 +81,7 @@ does not run Python or contact a service:
 $meshJsonScript = @'
 import argparse, asyncio, json
 from decimal import Decimal
-from deepdive_ai.agents.common import AgentLimits, MeshJSON
+from deepdive_ai.agents.common import AgentLimits, AgentOutputError, MeshJSON
 from deepdive_ai.agents.planner import MeshPlannerAgent
 from deepdive_ai.connectivity import MODEL, TestOptions, _Observation, _rate
 from deepdive_ai.http_transport import PublicHTTPTransport
@@ -121,8 +128,11 @@ async def probe(args):
             result["failure_category"] = "response_validation"
     except Exception as error:
         details = http_failure(error)
-        result["failure_category"] = (details["category"] if details else
+        result["failure_category"] = ("agent_contract_failure" if isinstance(error, AgentOutputError) else
+            details["category"] if details else
             "timeout" if isinstance(error, TimeoutError) else "agent_contract_or_runtime_failure")
+        if isinstance(error, AgentOutputError):
+            result["agent_failure_code"] = error.code.value
         if details is not None:
             result["failure_details"] = details
     result.update(attempts=observed.attempts, http_status=observed.status)

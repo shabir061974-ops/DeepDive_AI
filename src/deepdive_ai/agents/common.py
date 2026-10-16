@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 from dataclasses import dataclass, fields
+from enum import StrEnum
 
 from ..mesh import MeshClient, MeshRequest, MeshResponse
 from ..models import nonempty
@@ -13,8 +14,27 @@ class AgentError(RuntimeError):
     """Safe diagnostic: never include source content, model responses or secrets."""
 
 
+class AgentFailureCode(StrEnum):
+    INVALID_OUTPUT = "invalid_agent_output"
+    INVALID_TEXT = "invalid_text"
+    TEXT_LIMIT = "text_limit_exceeded"
+    INVALID_UNICODE = "invalid_unicode"
+    OBJECT_REQUIRED = "object_required"
+    FIELD_MISMATCH = "required_fields_mismatch"
+    LIST_REQUIRED = "list_required"
+    LIST_LIMIT = "list_limit_exceeded"
+    DUPLICATE_KEYS = "duplicate_json_keys"
+    NONFINITE = "nonfinite_json_value"
+    INVALID_RESPONSE = "invalid_mesh_response_record"
+    MALFORMED_JSON = "malformed_agent_json"
+    EMPTY_TASKS = "empty_planner_tasks"
+    DUPLICATE_TASKS = "duplicate_planner_tasks"
+
+
 class AgentOutputError(AgentError):
-    pass
+    def __init__(self, message: str, *, code: AgentFailureCode = AgentFailureCode.INVALID_OUTPUT):
+        super().__init__(message)
+        self.code = code if isinstance(code, AgentFailureCode) else AgentFailureCode.INVALID_OUTPUT
 
 
 class AgentLimitError(AgentError):
@@ -72,24 +92,30 @@ class AgentBudget:
 
 
 def text(value: object, maximum: int) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise AgentOutputError("Agent text is missing, invalid or exceeds its limit")
+    if not isinstance(value, str) or not value.strip():
+        raise AgentOutputError("Agent text is missing or invalid", code=AgentFailureCode.INVALID_TEXT)
+    if len(value) > maximum:
+        raise AgentOutputError("Agent text exceeds its limit", code=AgentFailureCode.TEXT_LIMIT)
     try:
         value.encode("utf-8")
     except UnicodeError:
-        raise AgentOutputError("Agent text contains invalid Unicode") from None
+        raise AgentOutputError("Agent text contains invalid Unicode", code=AgentFailureCode.INVALID_UNICODE) from None
     return value
 
 
 def object_fields(value: object, names: set[str]) -> dict:
-    if not isinstance(value, dict) or set(value) != names:
-        raise AgentOutputError("Agent output does not match the required schema")
+    if not isinstance(value, dict):
+        raise AgentOutputError("Agent output requires an object", code=AgentFailureCode.OBJECT_REQUIRED)
+    if set(value) != names:
+        raise AgentOutputError("Agent output does not match the required schema", code=AgentFailureCode.FIELD_MISMATCH)
     return value
 
 
 def bounded_list(value: object, maximum: int) -> list:
-    if not isinstance(value, list) or len(value) > maximum:
-        raise AgentOutputError("Agent list is invalid or exceeds its limit")
+    if not isinstance(value, list):
+        raise AgentOutputError("Agent list is invalid", code=AgentFailureCode.LIST_REQUIRED)
+    if len(value) > maximum:
+        raise AgentOutputError("Agent list exceeds its limit", code=AgentFailureCode.LIST_LIMIT)
     return value
 
 
@@ -97,13 +123,13 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict:
     result: dict = {}
     for key, value in pairs:
         if key in result:
-            raise AgentOutputError("Agent JSON contains duplicate keys")
+            raise AgentOutputError("Agent JSON contains duplicate keys", code=AgentFailureCode.DUPLICATE_KEYS)
         result[key] = value
     return result
 
 
 def _invalid_constant(value: str) -> None:
-    raise AgentOutputError("Agent JSON contains a non-finite value")
+    raise AgentOutputError("Agent JSON contains a non-finite value", code=AgentFailureCode.NONFINITE)
 
 
 class MeshJSON:
@@ -141,9 +167,9 @@ class MeshJSON:
         except Exception:
             raise AgentError("Mesh completion failed") from None
         if not isinstance(response, MeshResponse):
-            raise AgentOutputError("Mesh returned an invalid response record")
+            raise AgentOutputError("Mesh returned an invalid response record", code=AgentFailureCode.INVALID_RESPONSE)
         raw = text(response.text, self.limits.max_response_chars)
         try:
             return json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
         except (ValueError, RecursionError):
-            raise AgentOutputError("Mesh returned malformed agent JSON") from None
+            raise AgentOutputError("Mesh returned malformed agent JSON", code=AgentFailureCode.MALFORMED_JSON) from None

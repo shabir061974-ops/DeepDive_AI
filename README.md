@@ -11,10 +11,15 @@ Developed by Chabir Ahamad Abusali
 The five-agent pipeline is verified end to end with mocked HTTP provider
 responses, and the six-scenario dashboard remains explicitly offline. The
 published Phase 9 checkpoint `1e181bd` passed its own [Offline CI run](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/38929566748).
-Mesh connectivity is operator-verified; Brave readiness and a complete live
-five-agent run remain unverified. No live research success or benchmark accuracy
+Mesh text connectivity and Brave HTTP 200 are operator-reported verified; Mesh
+agent-JSON compatibility and a complete live five-agent run remain unverified. No live research success or benchmark accuracy
 is claimed. See the [demo rehearsal, YouTube script and submission checklist](docs/submission_readiness.md)
 and [controlled live-run instructions](docs/live_research.md).
+
+The latest Planner probe returned HTTP 200 but failed its contract; the exact
+rejected condition was not retained. [Planner diagnostic findings](docs/planner_compatibility.md)
+explain the new fixed failure codes and the unchanged strict validation. No new
+provider request was made to investigate it.
 
 ## Publication and CI readiness
 

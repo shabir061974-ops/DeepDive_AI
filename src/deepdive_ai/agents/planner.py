@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from ..models import ResearchQuestion, ResearchTask
-from .common import AgentOutputError, MeshJSON, bounded_list, object_fields, text
+from .common import AgentFailureCode, AgentOutputError, MeshJSON, bounded_list, object_fields, text
 
 
 class PlannerAgent(Protocol):
@@ -21,15 +21,16 @@ class MeshPlannerAgent:
         result = object_fields(await self.llm.ask(
             "planner", "Decompose this question into independent, specific research queries. "
             f"Return 1 to {limits.max_tasks} tasks. Include tasks checking counter-evidence. "
+            f"Each instruction must be a nonempty string of at most {limits.max_text_chars} characters. "
             "Do not answer the question or generate URLs.",
             {"tasks": [{"instruction": "nonempty research query"}]},
             {"question": question.text}), {"tasks"})
         rows = bounded_list(result["tasks"], limits.max_tasks)
         if not rows:
-            raise AgentOutputError("Planner must return at least one task")
+            raise AgentOutputError("Planner must return at least one task", code=AgentFailureCode.EMPTY_TASKS)
         instructions = [text(object_fields(row, {"instruction"})["instruction"], limits.max_text_chars)
                         for row in rows]
         if len(set(instructions)) != len(instructions):
-            raise AgentOutputError("Planner returned duplicate tasks")
+            raise AgentOutputError("Planner returned duplicate tasks", code=AgentFailureCode.DUPLICATE_TASKS)
         return tuple(ResearchTask(f"{question.id}:task:{i}", question.id, instruction)
                      for i, instruction in enumerate(instructions, 1))

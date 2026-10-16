@@ -177,6 +177,7 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
         result, _, search, _ = await self.run_case(MeshTransport("not-json"))
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["failure_category"], "agent_contract_failure")
+        self.assertEqual(result["agent_failure_code"], "malformed_agent_json")
         folder, audit = self.files(result)
         self.assertEqual(audit[-1]["kind"], "failed")
         self.assertFalse((folder / "report.json").exists())

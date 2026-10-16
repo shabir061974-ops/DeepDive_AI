@@ -183,6 +183,8 @@ async def run_live(
     except Exception as error:
         # Agent boundaries sanitize errors; never print even injected exception text.
         result["status"] = "failed"
+        if isinstance(error, AgentOutputError):
+            result["agent_failure_code"] = error.code.value
         details = http_failure(error)
         result["failure_category"] = ("agent_contract_failure" if isinstance(error, AgentOutputError) else
                                       "timeout" if isinstance(error, TimeoutError) else
