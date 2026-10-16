@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from .agents.common import AgentLimits, AgentOutputError
@@ -13,7 +14,7 @@ from .connectivity import TestOptions, _rate
 from .extraction import BoundedContentExtractor, ExtractionSettings
 from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
-    PublicHTTPTransport, RequestPolicy, status_category,
+    PublicHTTPTransport, RequestPolicy, status_category, validate_url,
 )
 from .mesh import MeshAPIClient, MeshSettings
 from .models import ResearchQuestion, nonempty
@@ -60,19 +61,38 @@ def policy(timeout: int, requests: int, response_bytes: int) -> RequestPolicy:
 class ObservedTransport:
     """Safe counters/diagnostics only. Does not retain requests, headers or bodies."""
 
-    def __init__(self, transport: HTTPTransport, *, model: str | None = None):
+    def __init__(self, transport: HTTPTransport, *, model: str | None = None,
+                 source_diagnostics: bool = False):
         self.transport = transport
         self.model = model
+        self.source_diagnostics = source_diagnostics
         self.attempts = 0
         self.failure: dict | None = None
 
+    def _record_failure(self, details: dict, hostname: str | None) -> None:
+        self.failure = details
+        if hostname is not None and details["category"] != FailureCategory.UNSAFE_DESTINATION.value:
+            self.failure["source_hostname"] = hostname
+
     async def send(self, request: HTTPRequest) -> HTTPResponse:
         self.attempts += 1
+        hostname = None
+        if self.source_diagnostics:
+            try:
+                # Paths and even apparently ordinary query values may contain
+                # secrets. Retain only the normalized hostname, never a URL.
+                candidate = urlsplit(validate_url(request.url)).hostname
+                if candidate and len(candidate) <= 253 and (
+                        ":" in candidate or all(label and len(label) <= 63
+                        and label[0].isalnum() and label[-1].isalnum() for label in candidate.split("."))):
+                    hostname = candidate
+            except (HTTPError, ValueError, UnicodeError):
+                pass
         try:
             response = await self.transport.send(request)
             if response.status >= 400:
-                self.failure = {"category": status_category(response.status).value,
-                                "stage": None, "http_status": response.status}
+                self._record_failure({"category": status_category(response.status).value,
+                                      "stage": None, "http_status": response.status}, hostname)
             if self.model is not None and response.status == 200:
                 # The Mesh client independently validates strict JSON/completion shape.
                 # This runner additionally requires the selected model and bounded usage.
@@ -91,15 +111,16 @@ class ObservedTransport:
                                     http_status=200) from None
             return response
         except HTTPError as error:
-            self.failure = {"category": error.category.value,
-                            "stage": error.stage.value if error.stage else None, "http_status": error.http_status}
+            self._record_failure({"category": error.category.value,
+                                  "stage": error.stage.value if error.stage else None,
+                                  "http_status": error.http_status}, hostname)
             raise
         except asyncio.CancelledError:
             # wait_for cancels the inner transport before raising TimeoutError
             # outside this observer. Preserve only its fixed progress snapshot.
             stage, status = request.progress.snapshot() if request.progress is not None else (None, None)
-            self.failure = {"category": "request_cancelled", "stage": stage.value if stage else None,
-                            "http_status": status}
+            self._record_failure({"category": "request_cancelled", "stage": stage.value if stage else None,
+                                  "http_status": status}, hostname)
             raise
 
 
@@ -165,7 +186,8 @@ async def run_live(
                                         "brave_per_request": str(approvals.brave_request_rate)}})
         for name, supplied in (("mesh", mesh_transport), ("brave", brave_transport), ("source", source_transport)):
             observers[name] = ObservedTransport(supplied if supplied is not None else PublicHTTPTransport(),
-                                               model=options.model if name == "mesh" else None)
+                                               model=options.model if name == "mesh" else None,
+                                               source_diagnostics=name == "source")
         limits = AgentLimits(max_tasks=1, max_claims=2, max_question_chars=160, max_text_chars=160,
                              discovery_results_per_task=1, max_model_calls=7, max_discovery_calls=2,
                              max_fetch_calls=2, max_document_bytes=256_000, chunks_per_document=1,
@@ -193,8 +215,8 @@ async def run_live(
             result["failure_details"] = details
             for observer in observers.values():
                 if observer.failure is not None and observer.failure["category"] == "request_cancelled":
-                    observer.failure = {key: value if value is not None else observer.failure.get(key)
-                                        for key, value in details.items()}
+                    observer.failure.update({key: value if value is not None else observer.failure.get(key)
+                                             for key, value in details.items()})
     except asyncio.CancelledError:
         result["status"] = "interrupted"
         raise

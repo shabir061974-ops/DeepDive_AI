@@ -1,5 +1,46 @@
 # Phase 9: controlled real-adapter research preparation
 
+## Phase 10 source-failure destination diagnostics
+
+Starting at `aa5f1b8`, source-only failure diagnostics now include
+`diagnostics.source.source_hostname` in the terminal result and persisted
+`outcome.json`. The hostname is normalized through the existing URL validator
+and bounded to 253 characters. No source URL is retained in failure metadata:
+paths, query names/values, fragments, user information and headers may contain
+secrets, so a hostname-only policy is used. Credentials, bodies and exception
+messages remain excluded. Mesh and Brave diagnostics do not gain this field.
+
+For DNS failures, this is the requested hostname after URL validation, not proof
+of successful resolution or a public DNS answer. Existing DNS/IP validation
+still runs before connecting; unsafe-destination failures omit the hostname.
+Invalid URLs blocked before the observer may have no source diagnostic at all.
+Redirects are separately observed, so a failure on a permitted redirect records
+that request's hostname rather than the original source's hostname. Timeout
+cancellation preserves it when the terminal category is resolved to `timeout`.
+This identifies a destination, not the failing IP, an exact URL or a root cause.
+Do not put secrets in hostnames; treat destination metadata as private run data.
+
+The field uses the existing exclusive, flushed/fsynced outcome persistence.
+Audit event schemas and ordering are unchanged; no destination is added to
+`audit.jsonl`. Files remain under ignored `reports/live/`. A crash before outcome
+persistence can still leave only the partial audit, as documented below.
+Existing completed-report citations/provenance keep their original URLs.
+
+No request is added to collect diagnostics. Timeouts, zero HTTP retries, request
+budgets, TLS, SSRF, source retrieval and verification contracts are unchanged.
+The previous failed run's destination cannot be reconstructed by this change.
+The dashboard at port 8000 need not be restarted: future live CLI processes load
+the update independently. Browser tests use their own server at port 8765.
+
+Offline verification: 259 Python tests passed, including six new source-only
+diagnostic tests covering mocked DNS/TCP/TLS failures, unsafe destinations,
+redaction, redirect destinations, persisted failures and cancellation. Six
+browser scenarios, compilation, JavaScript syntax and whitespace checks passed.
+The publication scan found no credential-pattern or private-artifact findings.
+No live provider/source requests were made during implementation or testing.
+
+The following sections preserve the earlier Phase 9 preparation record.
+
 Started from verified clean HEAD `3dea62b` on `master`. The operator reports
 successful published GitHub Offline CI; its workflow is unchanged. No live
 Mesh, Brave, retrieval or other external requests were made in this phase.
