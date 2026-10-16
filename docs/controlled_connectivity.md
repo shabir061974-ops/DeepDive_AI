@@ -91,6 +91,14 @@ validated token counts when available, and cost estimates. It never outputs
 credentials, raw headers, provider error bodies,
 completion text, source URLs, query results, IDs or exception messages. Nothing is
 written to a report file automatically. Do not enable HTTP tracing or dump objects.
+Phase 7B adds `diagnostics.validation_checks` after successful schema parsing:
+fixed boolean/null results for `response_schema_compatible`, `model_matches`,
+`expected_version_matches`, `reply_matches` and `output_limit_satisfied`.
+`diagnostics.failed_checks` contains only the names whose results are false.
+Null means unchecked/unknown, not passed (optional version or unavailable usage).
+Every check is evaluated even after a mismatch; no compared values are emitted.
+Schema failures retain the existing error category and do not claim schema success.
+See the [HTTP 200 investigation](mesh_validation_investigation.md).
 Failures now include a fixed `failure_category` and any status already received
 before a rejected body. A null status still does not prove the server was never
 contacted; successful/unattempted checks have a null failure category.

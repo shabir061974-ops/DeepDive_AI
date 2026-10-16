@@ -107,7 +107,10 @@ class _Observation:
         if version is None:
             warnings.append("mesh_version_not_checked")
         diagnostics = {"gateway_attempts_reported": attempts, "gateway_fallback_reported": fallback,
-                       "version_matches": version_matches, "warnings": warnings}
+                       "version_matches": version_matches, "warnings": warnings,
+                       "validation_checks": {"response_schema_compatible": True,
+                                             "model_matches": data.get("model") == MODEL,
+                                             "expected_version_matches": version_matches}}
         usage = data.get("usage")
         names = ("prompt_tokens", "completion_tokens", "total_tokens")
         if not isinstance(usage, dict) or any(
@@ -182,9 +185,15 @@ async def run_connectivity(
             active.update(status="failed", cost_status="unknown_failure_may_be_billable")
             response = await MeshAPIClient(mesh_settings, mesh).complete(MeshRequest(MODEL, "Reply exactly OK.", 64))
             compatible, usage, diagnostics = mesh.mesh_metadata(options.mesh_version)
-            compatible = compatible and response.text.strip() == "OK"
+            # Evaluate every check, even after a mismatch. Only fixed names and
+            # booleans leave this boundary; never retain the compared values.
+            checks = diagnostics["validation_checks"]
+            checks["reply_matches"] = response.text.strip() == "OK"
+            checks["output_limit_satisfied"] = None if usage is None else usage["completion_tokens"] <= 64
+            diagnostics["failed_checks"] = [name for name, passed in checks.items() if passed is False]
+            compatible = compatible and checks["reply_matches"]
             # A provider violating the requested output cap is not a passing test.
-            compatible = compatible and (usage is None or usage["completion_tokens"] <= 64)
+            compatible = compatible and checks["output_limit_satisfied"] is not False
             active.update(response_compatible=compatible, token_usage=usage, diagnostics=diagnostics)
             if not compatible:
                 active["failure_category"] = FailureCategory.VALIDATION.value

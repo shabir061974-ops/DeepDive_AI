@@ -134,6 +134,10 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report["mesh"]["diagnostics"], {
             "gateway_attempts_reported": None, "gateway_fallback_reported": None, "version_matches": None,
             "warnings": ["gateway_attempts_unverified", "gateway_fallback_unverified", "mesh_version_not_checked"],
+            "validation_checks": {"response_schema_compatible": True, "model_matches": True,
+                                  "expected_version_matches": None, "reply_matches": True,
+                                  "output_limit_satisfied": True},
+            "failed_checks": [],
         })
         self.assertNotIn("X-Mesh-Version", dict(mesh.calls[0].headers))
         self.assertEqual((len(brave.calls), len(mesh.calls)), (1, 1))

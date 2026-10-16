@@ -45,6 +45,17 @@ and account pricing remain unverified. See the [readiness findings and separatel
 authorized future test commands](docs/mesh_readiness.md). The dashboard remains
 an offline fixture demonstration. Await SPA review before live execution.
 
+### Phase 7B HTTP 200 validation investigation
+
+The operator reports one Mesh HTTP 200 response with parsed usage but a failed
+application-level compatibility check. Investigation from `763c197` confirms
+the strict response parser had already passed; the retained report cannot
+identify the failed model, optional version or exact-reply condition. Added
+allowlisted check results and failing-check names without changing acceptance
+rules or exposing response values. See the [findings, remaining hypotheses and
+SPA recommendation](docs/mesh_validation_investigation.md). No additional live
+requests were made. The dashboard remains an offline fixture demonstration.
+
 ### Earlier provider checkpoints
 
 Phase 5B preparation at checkpoint `6e44a0e` adds an explicit controlled
