@@ -120,7 +120,7 @@ def _result() -> dict:
     return {"status": "not_run", "http_status": None, "attempts": 0,
             "response_compatible": None, "token_usage": None,
             "estimated_cost_usd": None, "cost_status": "not_run", "diagnostics": {},
-            "failure_category": None}
+            "failure_category": None, "failure_stage": None}
 
 
 async def run_connectivity(
@@ -197,8 +197,12 @@ async def run_connectivity(
         if category == FailureCategory.PROTOCOL and observer.status is not None and observer.status != 200:
             category = status_category(observer.status)
         active["failure_category"] = category.value
+        active["failure_stage"] = error.stage.value if isinstance(error, HTTPError) and error.stage is not None else None
+        if isinstance(error, HTTPError):
+            active["http_status"] = error.http_status
     finally:
-        active.update(http_status=observer.status, attempts=observer.attempts)
+        active.update(http_status=observer.status if observer.status is not None else active["http_status"],
+                      attempts=observer.attempts)
     return report
 
 

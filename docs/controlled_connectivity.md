@@ -13,6 +13,13 @@ verified SSL context. Certificate/hostname verification, SNI, DNS/IP safeguards,
 budgets, retries, timeouts and spending controls remain in force. That integration
 was verified offline only and does not authorize another live request.
 
+The operator's later Brave-only attempt timed out with null HTTP status and zero
+Mesh attempts. The [investigation from `52bd82b`](timeout_and_demo_continuity.md)
+adds `failure_stage` using fixed stage labels and per-request progress snapshots.
+The 10 seconds cover worker scheduling, DNS, TCP, TLS, request sending and all
+response reading together; it is not a separate allowance for each stage. No
+timeouts or retry counts were changed and no further live probe was performed.
+
 ## Bounds and stop conditions
 
 `python -m deepdive_ai.connectivity` defaults to **offline preflight**.

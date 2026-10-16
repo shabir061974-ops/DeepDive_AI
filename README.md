@@ -29,6 +29,13 @@ Mesh, on success or failure. Existing Brave spending and security controls remai
 required. See the [preflight and proposed retest commands](docs/controlled_connectivity.md#brave-only-retest-preparation);
 no live retest was performed during preparation.
 
+The later operator-run Brave-only retest timed out; Mesh remained unattempted.
+The [timeout investigation and demo-continuity assessment](docs/timeout_and_demo_continuity.md)
+from `52bd82b` documents the shared 10-second exchange budget and adds sanitized
+per-request failure stages without widening limits. Existing fixtures exercise
+the five-agent workflow offline; no dashboard/demo API or live accuracy claim
+is introduced by this investigation.
+
 The offline provider readiness audit starts at clean checkpoint `39cc3a0`.
 See [provider requirements, compatibility gaps and the bounded future live-test
 plan](docs/provider_readiness.md). Both required credentials were absent from

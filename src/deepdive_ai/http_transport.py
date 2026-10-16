@@ -38,6 +38,37 @@ class FailureCategory(StrEnum):
     INTERNAL = "internal_error"
 
 
+class TransportStage(StrEnum):
+    WORKER_QUEUE = "worker_queue"
+    DNS = "dns"
+    TCP = "tcp_connect"
+    TLS = "tls_handshake"
+    SEND = "send_request"
+    HEADERS = "response_headers"
+    BODY = "response_body"
+
+
+class TransportProgress:
+    """Per-request, thread-safe diagnostics containing only fixed stages/status."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._stage: TransportStage | None = None
+        self._status: int | None = None
+
+    def update(self, stage: TransportStage, status: int | None = None) -> None:
+        if not isinstance(stage, TransportStage):
+            raise ValueError("Invalid transport stage")
+        with self._lock:
+            self._stage = stage
+            if type(status) is int and 100 <= status <= 599:
+                self._status = status
+
+    def snapshot(self) -> tuple[TransportStage | None, int | None]:
+        with self._lock:
+            return self._stage, self._status
+
+
 def status_category(status: int) -> FailureCategory:
     if status in (401, 403):
         return FailureCategory.AUTHENTICATION
@@ -58,10 +89,11 @@ class HTTPError(RuntimeError):
     default_category = FailureCategory.PROTOCOL
 
     def __init__(self, message: str = "", *, category: FailureCategory | None = None,
-                 http_status: int | None = None):
+                 http_status: int | None = None, stage: TransportStage | None = None):
         super().__init__(message)
         self.category = category if isinstance(category, FailureCategory) else self.default_category
         self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+        self.stage = stage if isinstance(stage, TransportStage) else None
 
 
 class UnsafeURL(HTTPError):
@@ -177,6 +209,7 @@ class HTTPRequest:
     body: bytes = field(default=b"", repr=False)
     timeout_seconds: float = 20.0
     max_response_bytes: int = 2_000_000
+    progress: TransportProgress | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -213,13 +246,18 @@ class _PinnedConnection(http.client.HTTPConnection):
         super().__init__(host, port, timeout=timeout)
         self.address = address
         self.tls = tls
+        self.progress: TransportProgress | None = None
 
     def connect(self) -> None:
         raw = socket.socket(socket.AF_INET6 if ":" in self.address else socket.AF_INET, socket.SOCK_STREAM)
         self.sock = raw
         try:
             raw.settimeout(self.timeout)
+            if self.progress is not None:
+                self.progress.update(TransportStage.TCP)
             raw.connect((self.address, self.port))
+            if self.tls and self.progress is not None:
+                self.progress.update(TransportStage.TLS)
             self.sock = (ssl.create_default_context(cafile=certifi.where()).wrap_socket(raw, server_hostname=self.host)
                          if self.tls else raw)
         except BaseException:
@@ -238,11 +276,17 @@ class PublicHTTPTransport:
         self._resolver = resolver
 
     async def send(self, request: HTTPRequest) -> HTTPResponse:
+        if request.progress is None:
+            request = HTTPRequest(request.method, request.url, request.headers, request.body,
+                                  request.timeout_seconds, request.max_response_bytes, TransportProgress())
+        request.progress.update(TransportStage.WORKER_QUEUE)
         deadline = time.monotonic() + request.timeout_seconds
         try:
             return await asyncio.wait_for(asyncio.to_thread(self._send, request, deadline), request.timeout_seconds)
         except (TimeoutError, OSError, http.client.HTTPException) as error:
-            raise TransportError("HTTP transport failed or timed out", category=_transport_category(error)) from None
+            stage, status = request.progress.snapshot()
+            raise TransportError("HTTP transport failed or timed out", category=_transport_category(error),
+                                 stage=stage, http_status=status) from None
 
     def _send(self, request: HTTPRequest, deadline: float) -> HTTPResponse:
         url = validate_url(request.url)
@@ -250,16 +294,22 @@ class PublicHTTPTransport:
         host = parts.hostname
         assert host is not None
         port = 443 if parts.scheme == "https" else 80
+        progress = request.progress
+        if progress is not None:
+            progress.update(TransportStage.DNS)
         try:
             addresses = self._resolver(host, port)
+        except TimeoutError:
+            raise TransportError("DNS resolution timed out", category=FailureCategory.TIMEOUT, stage=TransportStage.DNS) from None
         except OSError:
-            raise TransportError("DNS resolution failed", category=FailureCategory.DNS) from None
+            raise TransportError("DNS resolution failed", category=FailureCategory.DNS, stage=TransportStage.DNS) from None
         if not addresses or any(not public_ip(ip) for ip in addresses):
             raise UnsafeURL("DNS destination is not public")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TransportError("HTTP deadline exceeded", category=FailureCategory.TIMEOUT)
         connection = _PinnedConnection(host, port, addresses[0], remaining, parts.scheme == "https")
+        connection.progress = progress
         response = None
         wire = None
 
@@ -276,6 +326,8 @@ class PublicHTTPTransport:
         timer.daemon = True
         timer.start()
         try:
+            if progress is not None:
+                progress.update(TransportStage.TCP)
             connection.connect()
             assert connection.sock is not None
             wire = connection.sock
@@ -287,10 +339,16 @@ class PublicHTTPTransport:
                 wire.settimeout(remaining)
 
             set_timeout()
+            if progress is not None:
+                progress.update(TransportStage.SEND)
             connection.request(request.method, urlunsplit(("", "", parts.path, parts.query, "")),
                                body=request.body or None, headers=dict(request.headers))
             set_timeout()
+            if progress is not None:
+                progress.update(TransportStage.HEADERS)
             response = connection.getresponse()
+            if progress is not None:
+                progress.update(TransportStage.HEADERS, response.status)
             head = HTTPResponse(response.status, tuple(response.getheaders()))
             if sum(len(k) + len(v) + 4 for k, v in head.headers) > 65536:
                 raise ResponseTooLarge("HTTP response headers exceed byte limit")
@@ -307,6 +365,8 @@ class PublicHTTPTransport:
                 raise HTTPError("Encoded HTTP responses are not supported", category=FailureCategory.UNSUPPORTED_ENCODING)
             chunks: list[bytes] = []
             size = 0
+            if progress is not None:
+                progress.update(TransportStage.BODY)
             while True:
                 set_timeout()
                 chunk = response.read1(min(65536, request.max_response_bytes + 1 - size))
@@ -326,10 +386,13 @@ class PublicHTTPTransport:
             # headers are attached to the exception.
             if response is not None and type(response.status) is int and 100 <= response.status <= 599:
                 error.http_status = response.status
+            if progress is not None:
+                error.stage = progress.snapshot()[0]
             raise
         except (TimeoutError, OSError, http.client.HTTPException) as error:
             raise TransportError("HTTP transport failed or timed out", category=_transport_category(error),
-                                 http_status=response.status if response is not None else None) from None
+                                 http_status=response.status if response is not None else None,
+                                 stage=progress.snapshot()[0] if progress is not None else None) from None
         finally:
             timer.cancel()
             if response is not None:
@@ -361,16 +424,19 @@ class BoundedHTTPClient:
                 if self.requests_used >= self.policy.max_requests:
                     raise RequestLimitExceeded("HTTP request budget exhausted")
                 self.requests_used += 1
+                progress = TransportProgress()
                 try:
                     response = await asyncio.wait_for(self.transport.send(HTTPRequest(
                         method, url, headers, body, self.policy.timeout_seconds,
-                        self.policy.max_response_bytes)), self.policy.timeout_seconds)
+                        self.policy.max_response_bytes, progress)), self.policy.timeout_seconds)
                 except (TransportError, TimeoutError) as error:
                     # Retrying ambiguous POST failures can duplicate billable completions.
                     if method != "GET" or attempt == self.policy.max_retries:
+                        stage, status = progress.snapshot()
                         raise TransportError("HTTP transport failed or timed out",
                                              category=error.category if isinstance(error, HTTPError) else FailureCategory.TIMEOUT,
-                                             http_status=error.http_status if isinstance(error, HTTPError) else None) from None
+                                             http_status=error.http_status if isinstance(error, HTTPError) and error.http_status is not None else status,
+                                             stage=error.stage if isinstance(error, HTTPError) and error.stage is not None else stage) from None
             if response is not None:
                 if len(response.body) > self.policy.max_response_bytes:
                     raise ResponseTooLarge("HTTP response exceeds byte limit")

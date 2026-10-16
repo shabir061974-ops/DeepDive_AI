@@ -94,7 +94,7 @@ class BraveSearchDiscovery:
                 ("Accept-Encoding", "identity")))
         except HTTPError as error:
             raise DiscoveryError("Search provider request failed", category=error.category,
-                                 http_status=error.http_status) from None
+                                 http_status=error.http_status, stage=error.stage) from None
         except Exception:
             raise DiscoveryError("Search provider request failed") from None
         # Never follow a redirect while holding a provider credential.
