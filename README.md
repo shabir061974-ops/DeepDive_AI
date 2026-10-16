@@ -6,6 +6,27 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
 Developed by Chabir Ahamad Abusali
 
+## Publication and CI readiness
+
+Phase 8 preparation starts at `4f415ac` on `master`. The application remains a
+local **OFFLINE FIXTURE DEMO — NO LIVE RESEARCH**. No complete live research run
+has passed. See [local setup](#local-setup), [verification](#verification) and the
+[publication audit, official hackathon CI requirements and live-integration gaps](docs/publication_readiness.md).
+
+The prepared `.github/workflows/offline-ci.yml` runs on pushes and pull requests:
+Windows Server 2025, Python 3.12, Node 24, a new `.venv`, the backend extra,
+all offline Python tests, compilation, JavaScript syntax and the installed-Chrome
+smoke test. It uses no Mesh, Brave or submission credentials. Hosted execution
+is not verified until a future authorized GitHub publication triggers it.
+Package installation downloads dependencies; the test workload is offline.
+
+The exact official hackathon workflow was retrieved and preserved as the
+**inactive** `docs/agent-arena-workflow.yml.template`. It is separate from our
+offline CI, requires OIDC/submission/provider secrets, and downloads a protected
+checker whose behavior could not be reviewed. Do not activate it until the
+official checks and possible provider usage are separately approved. The public
+workflow template was downloaded; no protected checker or provider was called.
+
 ## Phase 6 status
 
 The local dashboard and end-to-end offline fixture demo are implemented from
@@ -544,37 +565,54 @@ URLs and never used by application entrypoints.
 
 ## Local setup
 
-Use Python 3.12 (the supplied environment is Python 3.12.10).
+Use Python 3.12 (the supplied environment is Python 3.12.10). From the cloned
+repository directory in PowerShell, install the backend extra for the dashboard
+and complete test suite. Package installation requires public package-index
+access, including the declared setuptools/wheel build dependencies.
 
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -e '.[backend]'
 .\.venv\Scripts\python.exe main.py
 ```
 
-The core now requires the pinned PDF dependency, installed by `pip install -e .`.
-For the optional FastAPI shell, install the declared backend extra:
+`main.py` prints the greeting. Launch the offline dashboard separately:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -e '.[backend]'
+.\.venv\Scripts\python.exe -m uvicorn deepdive_ai.api:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-The supplied environment has FastAPI installed, and the health-endpoint test runs.
-On environments without FastAPI that optional test explicitly skips. HTTP, search
-and HTML parsing use the Python 3.12 standard library. Phase 4 adds the pinned
-`pypdf==6.20.1` dependency, installed into this repository's `.venv` for verification.
-Backend dependencies remain in the existing optional extra. No live search,
-retrieval or Mesh calls were used to install or test the implementation.
-No credential is needed for tests. Supply `MESH_API_KEY` through the process
-environment for future authorized Mesh use; never commit it. `.env` files are
-ignored and are not automatically loaded.
+Open http://127.0.0.1:8000/ and stop with Ctrl+C. Keep it bound to loopback.
+No API keys are needed. The core-only `pip install -e .` supports library/greeting
+use; it does not install FastAPI and cannot run the complete dashboard test suite.
+The pinned core dependencies are `pypdf==6.20.1` and `certifi==2026.7.22`.
+FastAPI and uvicorn remain in the declared `backend` extra; its version ranges
+are not a complete dependency lock. Python versions other than 3.12 are not
+covered by this CI preparation.
+
+Future separately authorized live research requires process environment names
+`MESH_API_KEY` and `BRAVE_SEARCH_API_KEY`, an approved model and explicit provider
+budgets. `.env` files are ignored and are not automatically loaded. No full live
+runner or live dashboard endpoint is enabled by these installation commands.
 
 ## Verification
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m compileall -q src main.py tests
+node --check src/deepdive_ai/static/dashboard.js
+node --check tests/browser_smoke.cjs
+node tests/browser_smoke.cjs
+git diff --check
 ```
+
+Browser checks require Node 24 and installed Chrome on Windows; an alternative
+installed Chromium executable can be passed as the script's first argument.
+They start temporary loopback services on ports 8765 and 9337, block external
+page requests, verify all six scenarios and the exact developer attribution at
+desktop/mobile sizes, and save generated output only under ignored `artifacts/`.
+No npm install or provider credential is needed. The offline GitHub workflow
+uses this same Windows setup and fails if the required browser is unavailable.
 
 Tests use fixed timestamps and explicit in-memory agent doubles. They cover the
 sequence, bounded retries and exhaustion, absent evidence, invalid references,
@@ -611,7 +649,7 @@ strict schemas/citation/quote checks constrain output, but prompt injection and
 semantic misclassification remain model risks. No live source or model accuracy
 claim is made. The workflow is not started by the greeting or health endpoint.
 
-Phase 6 dashboard changes remain uncommitted pending review from `1ff0e5b`.
+The Phase 6 dashboard and Phase 7B correction are included in checkpoint `4f415ac`.
 PDF export, persistent run history and live provider operation are deferred.
 The dashboard is a local fixture demonstration, not an authenticated production
 service. No live provider integration, push or deployment was performed.

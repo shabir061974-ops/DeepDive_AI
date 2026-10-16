@@ -102,9 +102,12 @@ async function scenario(id) {
   await click(".citation"); assert.equal(await evaluate("document.querySelector('#panel-sources').hidden"), false);
   assert.equal(await evaluate("document.querySelectorAll('.source-card').length"), 1);
   await cdp("Browser.setDownloadBehavior", {behavior:"allow",downloadPath:output});
+  // Require this run's download, rather than accepting an earlier export.
+  const exportPath = path.join(output,"deepdive-offline-supported.md");
+  if (fs.existsSync(exportPath)) fs.unlinkSync(exportPath);
   await click("#export");
-  await until(() => fs.existsSync(path.join(output,"deepdive-offline-supported.md")), "Markdown export failed");
-  assert.match(fs.readFileSync(path.join(output,"deepdive-offline-supported.md"),"utf8"), /OFFLINE FIXTURE DEMO/);
+  await until(() => fs.existsSync(exportPath), "Markdown export failed");
+  assert.match(fs.readFileSync(exportPath,"utf8"), /OFFLINE FIXTURE DEMO/);
   result = await scenario("unsupported"); assert.equal(result.metrics.unsupported, 1);
   await click("#tab-claims"); assert.match(await evaluate("document.querySelector('#claims-content').textContent"), /contradicts/);
   result = await scenario("conflict"); assert.equal(result.report, "needs_review"); assert.equal(result.metrics.research_retries, 1);

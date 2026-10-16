@@ -1,1 +1,2 @@
 /tests/fixtures/*.pdf binary
+/docs/agent-arena-workflow.yml.template -text

@@ -1,0 +1,58 @@
+name: Offline CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONUTF8: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      # Offline jobs never receive provider or submission secrets.
+      MESH_API_KEY: ''
+      BRAVE_SEARCH_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install project and dashboard dependencies
+        run: |
+          python -m venv .venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m pip install -e '.[backend]'
+      - name: Complete offline Python suite
+        run: .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+      - name: Python compilation
+        run: .\.venv\Scripts\python.exe -m compileall -q src tests main.py
+      - name: Dashboard JavaScript syntax
+        run: |
+          node --check src/deepdive_ai/static/dashboard.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check tests/browser_smoke.cjs
+      - name: Offline browser smoke test
+        run: |
+          $chromePath = Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'
+          if (-not (Test-Path -LiteralPath $chromePath)) { throw 'Required runner Chrome is unavailable.' }
+          node tests/browser_smoke.cjs $chromePath
+      - name: Ensure checks leave tracked files unchanged
+        run: git diff --exit-code

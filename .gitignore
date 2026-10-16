@@ -6,6 +6,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.secrets/
+*.key
+*.pem
+*.p12
+*.pfx
 .pytest_cache/
 .coverage
 htmlcov/
