@@ -66,8 +66,10 @@ transactional dollar ceiling is required, do not run Mesh with this interface.
 `--mesh-version` is optional expected-response validation, not authentication or
 a request pin. If supplied, missing/mismatched response version still fails. It
 does not change the key or add a version header. Without it, version is unchecked.
-The served model must still match the fixed candidate, with a complete text
-result `OK`. Routing attempt/fallback headers are parsed into bounded numbers,
+The served model must still match the fixed candidate, with a complete, nonempty
+assistant text result. Exact `OK` is diagnostic only; a non-OK reply can pass.
+Valid reported usage must confirm completion tokens <= 64; unavailable/invalid
+usage fails because the output cap cannot be confirmed. Routing attempt/fallback headers are parsed into bounded numbers,
 booleans and fixed warnings; absent or invalid values stay unknown. Reported
 multiple attempts or same-model fallback are diagnostic, not proof that our
 client retried. A passing result establishes only this connectivity/response
@@ -93,8 +95,10 @@ completion text, source URLs, query results, IDs or exception messages. Nothing 
 written to a report file automatically. Do not enable HTTP tracing or dump objects.
 Phase 7B adds `diagnostics.validation_checks` after successful schema parsing:
 fixed boolean/null results for `response_schema_compatible`, `model_matches`,
-`expected_version_matches`, `reply_matches` and `output_limit_satisfied`.
-`diagnostics.failed_checks` contains only the names whose results are false.
+`expected_version_matches` and `output_limit_satisfied`.
+The acceptance correction from `8006fa9` moves `reply_matches` to a standalone
+diagnostic at `diagnostics.reply_matches`; false does not fail connectivity.
+`diagnostics.failed_checks` names false required checks and an unknown output cap.
 Null means unchecked/unknown, not passed (optional version or unavailable usage).
 Every check is evaluated even after a mismatch; no compared values are emitted.
 Schema failures retain the existing error category and do not claim schema success.
@@ -131,10 +135,10 @@ Those are internal safety attestations and cannot prove account state.
 | Timeouts | 10s Brave, 15s Mesh, 30s overall awaited work | Cannot terminate upstream billing; OS DNS thread may outlive cancellation |
 | Tokens/bytes | Send 64 output-token limit; 2,048/16,384 byte caps | Provider token/thinking enforcement is not locally guaranteed |
 | Security/output | Existing SSRF/TLS/redirect checks and allowlisted output | Never output bodies, headers, exceptions or credentials |
-| Compatibility | Strict JSON, exact served model/text; optional version | Missing routing headers produce uncertainty, not invented verification |
+| Compatibility | Strict JSON, nonempty assistant text, exact served model, confirmed output cap; optional version | Does not assess instruction-following, factual accuracy or agent contracts |
 | Spending | Require approved rates and explicit controls acknowledgement | No local hard USD cap or authenticated account audit |
 
-The 64-token cap is checked against valid reported completion usage when present.
+The 64-token cap must be confirmed against valid reported completion usage.
 It is not a tokenizer, a thinking-token guarantee or a billable-token ceiling.
 Google's published direct rates must not substitute for unverified Mesh rates.
 
@@ -182,8 +186,9 @@ the existing 15-second attempt timeout, 30-second outer awaited deadline,
 64 requested output tokens and 16,384-byte response cap. There is no Brave
 request, source fetching or five-agent workflow. Stop for review on failure,
 missing usage, unexpected routing diagnostics or any other inconclusive result;
-never automatically resubmit. Unknown usage/routing can accompany exit code 0:
-that means response compatibility, not verified billing or gateway behavior.
+never automatically resubmit. Unknown routing can accompany exit code 0;
+unknown usage now fails. A pass means response compatibility, not verified
+billing, gateway behavior, exact instruction-following or factual accuracy.
 If account pricing/spend exposure cannot be approved, do not execute.
 
 ### Brave-only retest preparation

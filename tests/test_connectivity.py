@@ -135,8 +135,9 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
             "gateway_attempts_reported": None, "gateway_fallback_reported": None, "version_matches": None,
             "warnings": ["gateway_attempts_unverified", "gateway_fallback_unverified", "mesh_version_not_checked"],
             "validation_checks": {"response_schema_compatible": True, "model_matches": True,
-                                  "expected_version_matches": None, "reply_matches": True,
+                                  "expected_version_matches": None,
                                   "output_limit_satisfied": True},
+            "reply_matches": True,
             "failed_checks": [],
         })
         self.assertNotIn("X-Mesh-Version", dict(mesh.calls[0].headers))
@@ -174,16 +175,20 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
                       {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 99},
                       {"prompt_tokens": "sensitive-body", "completion_tokens": 2, "total_tokens": 12}):
             report, _, _ = await self.run_fixture(mesh=Transport(mesh_response(usage=usage)))
-            self.assertEqual(report["mesh"]["status"], "passed")
+            self.assertEqual(report["mesh"]["status"], "failed")
             self.assertIsNone(report["mesh"]["token_usage"])
             self.assertIsNone(report["mesh"]["estimated_cost_usd"])
-            self.assertEqual(report["mesh"]["cost_status"], "usage_unavailable")
+            self.assertEqual(report["mesh"]["cost_status"], "unknown_failure_may_be_billable")
+            self.assertEqual(report["mesh"]["diagnostics"]["failed_checks"], ["output_limit_satisfied"])
 
-    async def test_unexpected_text_or_output_cap_violation_fails(self):
-        for changes in ({"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "other"}}]},
-                        {"usage": {"prompt_tokens": 10, "completion_tokens": 65, "total_tokens": 75}}):
-            report, _, _ = await self.run_fixture(mesh=Transport(mesh_response(**changes)))
-            self.assertEqual(report["mesh"]["status"], "failed")
+    async def test_non_ok_text_passes_but_output_cap_violation_fails(self):
+        response = mesh_response(choices=[{"finish_reason": "stop", "message": {"role": "assistant", "content": "other"}}])
+        report, _, _ = await self.run_fixture(mesh=Transport(response))
+        self.assertEqual(report["mesh"]["status"], "passed")
+        self.assertFalse(report["mesh"]["diagnostics"]["reply_matches"])
+        report, _, _ = await self.run_fixture(mesh=Transport(mesh_response(
+            usage={"prompt_tokens": 10, "completion_tokens": 65, "total_tokens": 75})))
+        self.assertEqual(report["mesh"]["status"], "failed")
 
     async def test_transport_exception_and_timeout_are_redacted_without_retry(self):
         for error in (RuntimeError(ENV["MESH_API_KEY"]), asyncio.TimeoutError(ENV["MESH_API_KEY"])):

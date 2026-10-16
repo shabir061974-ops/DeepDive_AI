@@ -188,12 +188,14 @@ async def run_connectivity(
             # Evaluate every check, even after a mismatch. Only fixed names and
             # booleans leave this boundary; never retain the compared values.
             checks = diagnostics["validation_checks"]
-            checks["reply_matches"] = response.text.strip() == "OK"
+            # Exact wording measures instruction following, not connectivity.
+            # Nonempty assistant text was already required by MeshAPIClient.
+            diagnostics["reply_matches"] = response.text.strip() == "OK"
             checks["output_limit_satisfied"] = None if usage is None else usage["completion_tokens"] <= 64
-            diagnostics["failed_checks"] = [name for name, passed in checks.items() if passed is False]
-            compatible = compatible and checks["reply_matches"]
+            diagnostics["failed_checks"] = [name for name, passed in checks.items()
+                                            if passed is False or (name == "output_limit_satisfied" and passed is None)]
             # A provider violating the requested output cap is not a passing test.
-            compatible = compatible and checks["output_limit_satisfied"] is not False
+            compatible = compatible and checks["output_limit_satisfied"] is True
             active.update(response_compatible=compatible, token_usage=usage, diagnostics=diagnostics)
             if not compatible:
                 active["failure_category"] = FailureCategory.VALIDATION.value

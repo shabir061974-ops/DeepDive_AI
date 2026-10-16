@@ -1,5 +1,60 @@
 # Phase 7B: Mesh HTTP 200 response validation investigation
 
+## Acceptance correction from 8006fa9
+
+This correction supersedes the exact-reply policy in the historical investigation
+below. HEAD `8006fa9` was verified clean. The operator's newer diagnostic reports
+that only `reply_matches` failed, with schema/model/output-limit checks passing.
+That identifies the rejection as the harness's exact-OK requirement. The actual
+reply text remains unknown and was neither reconstructed nor inspected.
+
+Exact `OK` appears only in the smoke-test harness, not production research
+contracts. `agents/common.py` independently parses strict agent JSON; individual
+agents enforce schemas, evidence references, quote grounding and verification.
+Those files and `mesh.py` are unchanged.
+
+The corrected connectivity contract requires HTTP 200, successful strict Mesh
+parsing (including nonempty assistant text and `finish_reason: stop`), exact
+model match, any explicitly requested version match and confirmed completion
+usage <= 64. The prompt still requests `OK` to keep the request small; matching
+it is optional diagnostic information at `diagnostics.reply_matches`. It has
+been removed from `validation_checks` and `failed_checks` and cannot cause
+`response_validation`. Required checks still appear in those structures.
+
+To meet the confirmed-output-limit condition, unavailable or invalid usage now
+fails conservatively: `output_limit_satisfied` is null and appears in
+`failed_checks`; cost stays unknown and may be billable. This tightens only
+harness acceptance; no provider, production parser, token limit, retry, timeout,
+request budget, TLS, SSRF or spending control changed. Optional unrequested
+version remains unchecked and does not fail. Missing routing headers remain
+diagnostic uncertainty.
+
+A successful test proves the selected endpoint returned a bounded, complete,
+schema-compatible text completion with the expected model/version and reported
+usage within the requested cap for that invocation. It does not prove exact
+instruction-following, factual accuracy, usable agent JSON, grounded claims,
+successful research, verified gateway behavior or invoice totals. It does not
+enable dashboard live mode. Malformed/empty/whitespace-only, truncated, tool,
+unsupported content, wrong-model, version-mismatched and over-limit responses
+remain rejected.
+
+Offline regression tests cover non-OK replies and CLI success without exposing
+their text, the operator-reported 4/27/31 usage with an authored non-OK reply,
+remaining model/version/token failures even with non-OK text, strict schema
+rejections, and unknown usage rejection. Existing expectations are migrated to
+the explicit harness-only contract change. These fixtures are not live captures.
+
+No live request or credential inspection was performed. Stop for SPA review;
+any later live request still needs separate authorization and approved spending.
+
+Verification: **221 offline tests passed in 9.697 seconds**, zero failures,
+errors or skips (219 existing tests with migrated harness expectations, plus
+two new regression tests). Python compilation of `src`, `tests` and `main.py`
+and `git diff --check` passed. HEAD remains `8006fa9`; eight intended files are
+modified, all unstaged. No implementation blockers remain for SPA review.
+
+## Historical diagnostic-only investigation
+
 Starting HEAD `763c197` was verified clean. This investigation used local source,
 tests and documentation only. No live requests, credential inspection, paid
 operations, TLS changes, commits, pushes or deployments occurred.

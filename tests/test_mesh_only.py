@@ -138,7 +138,7 @@ class MeshOnlyTests(unittest.IsolatedAsyncioTestCase):
         for response in (HTTPResponse(200, (("Content-Type", "application/json"),), b"bad-json"),
                          completion(choices=[{"finish_reason": "length", "message": {"role": "assistant", "content": "OK"}}]),
                          completion(model="another-model"),
-                         completion(choices=[{"finish_reason": "stop", "message": {"role": "assistant", "content": KEY}}]),
+                         completion(choices=[{"finish_reason": "stop", "message": {"role": "assistant", "content": " "}}]),
                          completion(usage={"prompt_tokens": 10, "completion_tokens": 65, "total_tokens": 75})):
             report, mesh = await self.run_fixture(response)
             self.assertEqual(report["mesh"]["status"], "failed")
@@ -149,10 +149,11 @@ class MeshOnlyTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_usage_and_gateway_headers_are_explicit_uncertainties(self):
         report, _ = await self.run_fixture(completion(usage=None))
         result = report["mesh"]
-        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["status"], "failed")
         self.assertIsNone(result["token_usage"])
         self.assertIsNone(result["estimated_cost_usd"])
-        self.assertEqual(result["cost_status"], "usage_unavailable")
+        self.assertEqual(result["cost_status"], "unknown_failure_may_be_billable")
+        self.assertEqual(result["diagnostics"]["failed_checks"], ["output_limit_satisfied"])
         self.assertIn("gateway_attempts_unverified", result["diagnostics"]["warnings"])
         self.assertIn("gateway_fallback_unverified", result["diagnostics"]["warnings"])
 
@@ -171,7 +172,8 @@ class MeshOnlyCommandTests(unittest.TestCase):
                 "--mesh-input-usd-per-million", "1", "--mesh-output-usd-per-million", "2"]
 
     def test_cli_success_requires_only_mesh_pass(self):
-        transport = Transport(completion())
+        transport = Transport(completion(choices=[{"finish_reason": "stop", "message": {
+            "role": "assistant", "content": "private non-OK fixture reply"}}]))
         with patch.dict("os.environ", {"MESH_API_KEY": KEY}, clear=True), \
                 patch("sys.argv", self.arguments() + ["--execute"]), \
                 patch("deepdive_ai.connectivity.PublicHTTPTransport", return_value=transport), \
@@ -180,7 +182,9 @@ class MeshOnlyCommandTests(unittest.TestCase):
             self.assertEqual(main(), 0)
         self.assertEqual(len(transport.calls), 1)
         self.assertEqual(json.loads(output.getvalue())["brave"]["status"], "not_run")
+        self.assertFalse(json.loads(output.getvalue())["mesh"]["diagnostics"]["reply_matches"])
         self.assertNotIn(KEY, output.getvalue())
+        self.assertNotIn("private non-OK fixture reply", output.getvalue())
 
     def test_cli_default_is_offline_preflight(self):
         with patch.dict("os.environ", {"MESH_API_KEY": KEY}, clear=True), \

@@ -1,5 +1,9 @@
 # Phase 7A: isolated Mesh test readiness
 
+Historical readiness record. The [Phase 7B acceptance correction](mesh_validation_investigation.md#acceptance-correction-from-8006fa9)
+supersedes the exact-OK rule and unknown-usage acceptance described below.
+Current operator policy is in [controlled connectivity](controlled_connectivity.md).
+
 Starting HEAD `bfa152d` was verified with a clean working tree. This review uses
 local source, tests and the earlier public-documentation audit; provider pages
 were not rechecked in this phase. No credentials were inspected and no live

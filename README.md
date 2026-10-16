@@ -2,6 +2,10 @@
 
 Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
+## Project attribution
+
+Developed by Chabir Ahamad Abusali
+
 ## Phase 6 status
 
 The local dashboard and end-to-end offline fixture demo are implemented from
@@ -55,6 +59,14 @@ allowlisted check results and failing-check names without changing acceptance
 rules or exposing response values. See the [findings, remaining hypotheses and
 SPA recommendation](docs/mesh_validation_investigation.md). No additional live
 requests were made. The dashboard remains an offline fixture demonstration.
+
+The Phase 7B correction from `8006fa9` makes exact `OK` diagnostic-only in the
+connectivity harness: complete, nonempty assistant text is sufficient when model,
+schema, confirmed output cap and any requested version checks pass. Missing or
+invalid usage fails because the cap cannot be confirmed. Production agent JSON,
+claim verification and evidence contracts are unchanged. See the [acceptance
+correction and its limits](docs/mesh_validation_investigation.md#acceptance-correction-from-8006fa9).
+No new live test was performed during this correction.
 
 ### Earlier provider checkpoints
 

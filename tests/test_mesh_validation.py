@@ -34,12 +34,10 @@ class MeshValidationTests(unittest.IsolatedAsyncioTestCase):
     def reply(self, text, *, finish="stop", **extra):
         return [{"finish_reason": finish, "message": {"role": "assistant", "content": text, **extra}}]
 
-    async def test_reported_usage_does_not_identify_failed_condition(self):
-        # Three different authored responses reproduce the reported count/category.
-        # None is asserted to be the operator's unknown live response.
+    async def test_reported_usage_with_model_or_version_failure_still_rejects(self):
+        # Authored fixtures, not a reconstruction of the live response.
         usage = {"prompt_tokens": 4, "completion_tokens": 27, "total_tokens": 31}
-        cases = ((completion(usage=usage, choices=self.reply("private-answer")), OPTIONS, "reply_matches"),
-                 (completion(usage=usage, model="private-model"), OPTIONS, "model_matches"),
+        cases = ((completion(usage=usage, model="private-model"), OPTIONS, "model_matches"),
                  (completion(usage=usage), replace(OPTIONS, mesh_version="2026-08"), "expected_version_matches"))
         for response, options, failed in cases:
             with self.subTest(failed=failed):
@@ -58,7 +56,8 @@ class MeshValidationTests(unittest.IsolatedAsyncioTestCase):
         result = await self.run_response(HTTPResponse(200, headers, fixture.body),
                                          options=replace(OPTIONS, mesh_version="2026-08"))
         self.assertEqual(result["diagnostics"]["failed_checks"], [
-            "model_matches", "expected_version_matches", "reply_matches", "output_limit_satisfied"])
+            "model_matches", "expected_version_matches", "output_limit_satisfied"])
+        self.assertFalse(result["diagnostics"]["reply_matches"])
         self.assertEqual(result["status"], "failed")
         self.assertIsNone(result["estimated_cost_usd"])
 
@@ -68,24 +67,49 @@ class MeshValidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["diagnostics"]["failed_checks"], [])
         self.assertEqual(result["diagnostics"]["validation_checks"], {
             "response_schema_compatible": True, "model_matches": True, "expected_version_matches": None,
-            "reply_matches": True, "output_limit_satisfied": True})
+            "output_limit_satisfied": True})
+        self.assertTrue(result["diagnostics"]["reply_matches"])
 
-    async def test_exact_reply_rule_preserves_whitespace_tolerance_and_rejects_near_matches(self):
+    async def test_valid_non_ok_replies_pass_with_exact_match_only_diagnostic(self):
         for text in ("OK", " \r\nOK\t", "ok", "OK.", '"OK"', "OK private-answer"):
             result = await self.run_response(completion(choices=self.reply(text)))
             matches = text.strip() == "OK"
-            self.assertEqual(result["response_compatible"], matches)
-            self.assertEqual(result["diagnostics"]["validation_checks"]["reply_matches"], matches)
+            self.assertTrue(result["response_compatible"])
+            self.assertEqual(result["status"], "passed")
+            self.assertIsNone(result["failure_category"])
+            self.assertEqual(result["diagnostics"]["failed_checks"], [])
+            self.assertEqual(result["diagnostics"]["reply_matches"], matches)
+
+    async def test_non_ok_reply_with_reported_usage_passes_without_leaking_text(self):
+        result = await self.run_response(completion(choices=self.reply("private-answer"),
+            usage={"prompt_tokens": 4, "completion_tokens": 27, "total_tokens": 31}))
+        self.assertEqual(result["status"], "passed")
+        self.assertFalse(result["diagnostics"]["reply_matches"])
+        self.assertEqual(result["diagnostics"]["failed_checks"], [])
+        self.assertTrue(result["diagnostics"]["validation_checks"]["output_limit_satisfied"])
+
+    async def test_non_ok_reply_cannot_bypass_model_version_or_output_limit(self):
+        for changes, options, failed in (
+            ({"model": "private-model"}, OPTIONS, "model_matches"),
+            ({}, replace(OPTIONS, mesh_version="2026-08"), "expected_version_matches"),
+            ({"usage": {"prompt_tokens": 4, "completion_tokens": 65, "total_tokens": 69}},
+             OPTIONS, "output_limit_satisfied"),
+        ):
+            result = await self.run_response(completion(choices=self.reply("private-answer"), **changes), options=options)
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["failure_category"], "response_validation")
+            self.assertEqual(result["diagnostics"]["failed_checks"], [failed])
 
     async def test_missing_invalid_usage_does_not_claim_output_cap_was_verified(self):
         for usage in (None, {}, {"prompt_tokens": 4, "completion_tokens": 27, "total_tokens": 99},
                       {"prompt_tokens": True, "completion_tokens": 27, "total_tokens": 28}):
             result = await self.run_response(completion(usage=usage))
-            self.assertEqual(result["status"], "passed")  # Existing policy, not a billing pass.
+            self.assertEqual(result["status"], "failed")  # Unknown output usage cannot confirm the cap.
             self.assertIsNone(result["diagnostics"]["validation_checks"]["output_limit_satisfied"])
             self.assertIsNone(result["token_usage"])
             self.assertIsNone(result["estimated_cost_usd"])
-            self.assertEqual(result["cost_status"], "usage_unavailable")
+            self.assertEqual(result["cost_status"], "unknown_failure_may_be_billable")
+            self.assertEqual(result["diagnostics"]["failed_checks"], ["output_limit_satisfied"])
 
     async def test_optional_metadata_and_usage_details_remain_ignored(self):
         result = await self.run_response(completion(

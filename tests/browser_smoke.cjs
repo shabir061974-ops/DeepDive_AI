@@ -40,6 +40,19 @@ async function evaluate(expression) {
   return response.result.value;
 }
 async function click(selector) { return evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); }
+async function checkDeveloperCredit() {
+  const credit = await evaluate(`(() => {
+    const element = document.querySelector('.page-footer .developer-credit');
+    if (!element) return null;
+    const bounds = element.getBoundingClientRect(), style = getComputedStyle(element);
+    return {text:element.textContent, visible:style.display !== 'none' && style.visibility === 'visible'
+      && Number(style.opacity) > 0 && bounds.height > 0 && bounds.width > 0,
+      fits:bounds.left >= 0 && bounds.right <= innerWidth && element.scrollWidth <= element.clientWidth};
+  })()`);
+  assert.equal(credit?.text, 'Developed by Chabir Ahamad Abusali');
+  assert.equal(credit.visible, true, 'Developer attribution must be visible');
+  assert.equal(credit.fits, true, 'Developer attribution must fit the viewport');
+}
 async function screenshot(name) {
   await evaluate("window.scrollTo(0,0);document.activeElement?.blur()");
   const result = await cdp("Page.captureScreenshot", {format: "png", captureBeyondViewport: true});
@@ -81,6 +94,7 @@ async function scenario(id) {
   await cdp("Emulation.setDeviceMetricsOverride", {width:1440,height:1100,deviceScaleFactor:1,mobile:false});
   await cdp("Page.navigate", {url:"http://127.0.0.1:8765/"});
   await until(() => evaluate("document.querySelector('#run') && !document.querySelector('#run').disabled"), "Dashboard did not initialize");
+  await checkDeveloperCredit();
   await screenshot("dashboard-initial.png");
   let result = await scenario("supported"); assert.equal(result.report, "verified"); assert.equal(result.metrics.supported, 1);
   assert.match(result.notice, /NO LIVE RESEARCH/);
@@ -104,10 +118,11 @@ async function scenario(id) {
   assert.equal(await evaluate("document.querySelector('#export').disabled"),true);
   await scenario("supported");
   await cdp("Emulation.setDeviceMetricsOverride", {width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await checkDeveloperCredit();
   await screenshot("dashboard-mobile.png");
   assert.equal(await evaluate("document.documentElement.scrollWidth <= window.innerWidth"),true,"Mobile layout overflows");
   assert.deepEqual(consoleErrors,[]); assert.deepEqual(externalRequests,[]);
-  console.log("PASS: six scenarios, streamed progress, citation navigation, contradictions, retries, empty/error states, Markdown download, desktop/mobile layout; zero browser errors or external page requests.");
+  console.log("PASS: six scenarios, streamed progress, citation navigation, contradictions, retries, empty/error states, Markdown download, desktop/mobile layout and exact visible developer attribution; zero browser errors or external page requests.");
 })().catch(error => { console.error(error.message); process.exitCode=1; }).finally(async () => {
   if (socket?.readyState===1) { try { await cdp("Browser.close"); } catch {} socket.close(); }
   if (browser && browser.exitCode===null) browser.kill();

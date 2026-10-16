@@ -1,3 +1,10 @@
+.page-footer .developer-credit {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 :root{
   --bg:#0c1014;
   --surface:#12181e;
