@@ -4,6 +4,7 @@ import base64
 import fnmatch
 import io
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -166,7 +167,9 @@ class PublicationConfigurationTests(unittest.TestCase):
             encoded = base64.b64encode((mock_prompt + "& {\n" + script + "\n}").encode("utf-16-le")).decode("ascii")
             command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
             first = subprocess.run(command, capture_output=True, timeout=15, check=False)
-            self.assertEqual(first.returncode, 0, "Synthetic setup failed; no credential output is shown")
+            cause = re.search(rb'Private setup failed at ([a-z_]+) \(([A-Za-z]+)\)', first.stderr)
+            safe_cause = cause.group(0).decode() if cause else "Synthetic setup failed; sanitized cause unavailable"
+            self.assertEqual(first.returncode, 0, safe_cause)
             original = target.read_bytes()
             self.assertEqual(original.count(b"offline-setup-fixture"), 2)
             configuration._check_permissions(target)

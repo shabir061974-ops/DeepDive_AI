@@ -8,6 +8,7 @@ $secureInputs = @()
 $buffers = @()
 $stream = $null
 $writer = $null
+$setupStage = 'masked_input'
 try {
     foreach ($name in @('MESH_API_KEY', 'BRAVE_SEARCH_API_KEY')) {
         $secure = Read-Host ('Enter ' + $name + ' (masked)') -AsSecureString
@@ -33,6 +34,7 @@ try {
             }
         }
     }
+    $setupStage = 'acl_setup'
     $current = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $acl = New-Object Security.AccessControl.FileSecurity
     $acl.SetAccessRuleProtection($true, $false)
@@ -45,9 +47,11 @@ try {
         $acl.AddAccessRule($rule)
     }
     # Apply the protected ACL atomically at exclusive file creation, before writing.
+    $setupStage = 'exclusive_create'
     $stream = [IO.FileStream]::new($configPath, [IO.FileMode]::CreateNew,
         [Security.AccessControl.FileSystemRights]::Write, [IO.FileShare]::None,
         4096, [IO.FileOptions]::None, $acl)
+    $setupStage = 'write'
     $writer = [IO.StreamWriter]::new($stream, [Text.UTF8Encoding]::new($false))
     $writer.Write('MESH_API_KEY=')
     $writer.Write($buffers[0])
@@ -59,7 +63,9 @@ try {
     $stream.Flush($true)
     Write-Output 'Private configuration created with restricted permissions. No keys displayed.'
 } catch {
-    throw 'Private setup failed. Existing files were not overwritten. Any partial file remains restricted; review locally without displaying its contents.'
+    # Only local stage and framework type; never emit exception text or inputs.
+    $failureType = $_.Exception.GetBaseException().GetType().Name
+    throw ('Private setup failed at ' + $setupStage + ' (' + $failureType + '). Existing files were not overwritten. Any partial file remains restricted; review locally without displaying its contents.')
 } finally {
     if ($null -ne $writer) { $writer.Dispose() }
     if ($null -ne $stream) { $stream.Dispose() }
