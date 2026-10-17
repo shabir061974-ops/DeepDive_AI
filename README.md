@@ -74,6 +74,68 @@ Fixture citations use authored `.invalid` identifiers. The live runner never
 substitutes fixtures when providers fail. Events and counts come from execution;
 they are not benchmark scores or invented timings.
 
+## Reproducible offline self-evaluation
+
+Evaluation **v1.0** adds six fictional research questions separately from the
+dashboard scenarios. The local measured run passed **6/6 cases**, using the
+existing five agents, Mesh response parser, Brave discovery adapter, HTTP
+retriever and coordinator with injected HTTP doubles. Real DNS, sockets, default
+HTTP transports and private credential loading are blocked during evaluation.
+All documents are labeled **AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH**;
+all source identifiers use `.invalid` URLs.
+
+These results measure **deterministic offline correctness against scripted
+assessments**, not live semantic accuracy, independent source truth, search
+quality, research completeness or organizer-checker acceptance. The scripted
+verifier deliberately proposes positive verdicts; actual production vetoes must
+reject contradictory or insufficient assessments. This cannot detect a real
+model incorrectly calling an unrelated excerpt supportive. The unresolved Mesh
+model-ID mismatch and incomplete live validation remain unchanged.
+
+| Case | Final supported/unsupported/insufficient claims | Accepted citations traceable | Unsafe acceptances | Contradiction safeguard | Retries observed/expected |
+| --- | --- | --- | --- | --- | --- |
+| Supported comparison | 2/0/0 | 2/2 | N/A | N/A | 0/0 |
+| Direct contradiction | 0/1/0 | N/A | 0/1 | 1/1 | 0/0 |
+| Conflicting documents | 0/0/1 | N/A | 0/1 | 1/1 | 1/1 |
+| Evidence-gap recovery | 1/0/0 | 1/1 | N/A | N/A | 1/1 |
+| Missing evidence | 0/0/0 | N/A | N/A | N/A | 1/1 |
+| Qualifier preservation | 0/0/1 | N/A | 0/1 | N/A | 1/1 |
+
+Aggregate classification correctness: supported **3/3**, unsupported **1/1**,
+insufficient evidence **2/2**. Unsafe acceptances: **0/3** eligible unsafe claims;
+citation traceability: **3/3** accepted citations; contradiction safeguards:
+**2/2** eligible cases; retry correctness: **6/6** cases. Four research retries
+occurred in total, with at most one per case. Each comparison claim resolves to
+a different authored source identity; this is not real-world source independence.
+N/A means no eligible observations, not a passing percentage. Final claims are
+counted once; initial/retry rounds remain available separately in JSON.
+
+After installing `.[backend]`, run from the repository root in PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -B tests/offline_evaluation.py
+if ($LASTEXITCODE -ne 0) { throw 'Offline evaluation failed; inspect the saved observations.' }
+```
+
+The runner writes a new `artifacts/offline-evaluation-v1.0/run-<id>/` containing
+`results.json` and `results.md`, including the evaluation version, manifest and
+document hashes, evaluation-code hash, Git checkpoint and dirty-tree flag.
+Artifacts retain actual report/round/audit observations and failed checks; a
+failed case causes a nonzero exit. Later invocations do not overwrite prior runs.
+The reported local measurements were made on baseline `de78e25` with uncommitted
+evaluation changes, explicitly recorded as a dirty tree. Rerunning after checkout
+records that checkout's actual commit. Generated artifacts are ignored and are
+not published; the fixture manifest and runner are version controlled.
+
+Classification metrics compare exact claim text/status to separately authored
+expectations. Unsafe acceptance counts any accepted claim not expected supported.
+Citation checks follow evidence/source IDs and compare URL, fixture-byte digest,
+fixed retrieval timestamp, locator and excerpt bytes. Contradiction scoring
+requires observed contradictory assessments and their expected effective verdict
+and exclusion from synthesis. Retry scoring reads actual audit events. The
+regression suite also mutates verdicts/citations and injects failures to check
+that scoring preserves failures rather than substituting expected results.
+
 ## Private credential configuration
 
 Provider settings automatically fall back to the protected private file

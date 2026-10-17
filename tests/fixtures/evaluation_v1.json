@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "notice": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. All entities, documents and assessments are fictional.",
+  "timestamp": "2026-10-17T00:00:00+00:00",
+  "cases": [
+    {
+      "id": "supported_comparison",
+      "question": "What electricity consumption did the two fictional prototype trials record?",
+      "documents": {
+        "a": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Trial A consumed 12 kWh.",
+        "b": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Trial B consumed 15 kWh."
+      },
+      "rounds": [{"discover": ["a", "b"], "claims": [
+        {"text": "Fictional Trial A consumed 12 kWh.", "cite": ["a"], "relations": {"a": "supports", "b": "irrelevant"}},
+        {"text": "Fictional Trial B consumed 15 kWh.", "cite": ["b"], "relations": {"a": "irrelevant", "b": "supports"}}
+      ]}],
+      "expected": {"report_status": "verified", "retries": 0, "contradiction": false,
+        "claims": {"Fictional Trial A consumed 12 kWh.": "supported", "Fictional Trial B consumed 15 kWh.": "supported"}}
+    },
+    {
+      "id": "direct_contradiction",
+      "question": "Does the fictional archive policy specify 30-day retention?",
+      "documents": {"a": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Archive retains records for 90 days, not 30 days."},
+      "rounds": [{"discover": ["a"], "claims": [
+        {"text": "Fictional Archive retains records for 30 days.", "cite": ["a"], "relations": {"a": "contradicts"}}
+      ]}],
+      "expected": {"report_status": "needs_review", "retries": 0, "contradiction": true,
+        "claims": {"Fictional Archive retains records for 30 days.": "unsupported"}}
+    },
+    {
+      "id": "conflicting_documents",
+      "question": "What retention period do the fictional policy documents specify?",
+      "documents": {
+        "a": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Store retains records for 30 days.",
+        "b": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Store retains records for 90 days, not 30 days."
+      },
+      "rounds": [
+        {"discover": ["a", "b"], "claims": [{"text": "Fictional Store retains records for 30 days.", "cite": ["a"], "relations": {"a": "supports", "b": "contradicts"}}]},
+        {"discover": ["a", "b"], "claims": [{"text": "Fictional Store retains records for 30 days.", "cite": ["a"], "relations": {"a": "supports", "b": "contradicts"}}]}
+      ],
+      "expected": {"report_status": "needs_review", "retries": 1, "contradiction": true,
+        "claims": {"Fictional Store retains records for 30 days.": "insufficient_evidence"}}
+    },
+    {
+      "id": "evidence_gap_recovery",
+      "question": "What operating duration did the fictional battery trial demonstrate?",
+      "documents": {
+        "a": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Battery B was tested at 20 degrees Celsius; duration was omitted.",
+        "b": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Battery B ran for 8 hours."
+      },
+      "rounds": [
+        {"discover": ["a"], "claims": [{"text": "Fictional Battery B ran for 8 hours.", "cite": ["a"], "relations": {"a": "insufficient"}}]},
+        {"discover": ["b"], "claims": [{"text": "Fictional Battery B ran for 8 hours.", "cite": ["b"], "relations": {"a": "insufficient", "b": "supports"}}]}
+      ],
+      "expected": {"report_status": "verified", "retries": 1, "contradiction": false,
+        "claims": {"Fictional Battery B ran for 8 hours.": "supported"}}
+    },
+    {
+      "id": "missing_evidence",
+      "question": "When did the fictional museum open?",
+      "documents": {},
+      "rounds": [{"discover": [], "claims": []}, {"discover": [], "claims": []}],
+      "expected": {"report_status": "needs_review", "retries": 1, "contradiction": false, "claims": {}}
+    },
+    {
+      "id": "qualifier_preservation",
+      "question": "Do fictional three-site measurements establish performance at every site?",
+      "documents": {"a": "AUTHORED OFFLINE EVALUATION — NOT LIVE RESEARCH. Fictional Sensor S met its target at three sampled sites; other sites were not tested."},
+      "rounds": [
+        {"discover": ["a"], "claims": [{"text": "Fictional Sensor S meets its target at every site.", "cite": ["a"], "relations": {"a": "insufficient"}}]},
+        {"discover": ["a"], "claims": [{"text": "Fictional Sensor S meets its target at every site.", "cite": ["a"], "relations": {"a": "insufficient"}}]}
+      ],
+      "expected": {"report_status": "needs_review", "retries": 1, "contradiction": false,
+        "claims": {"Fictional Sensor S meets its target at every site.": "insufficient_evidence"}}
+    }
+  ]
+}
