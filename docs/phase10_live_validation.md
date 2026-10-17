@@ -1,6 +1,22 @@
 # Phase 10: staged live validation preparation
 
-Latest operator result: Brave separately passed HTTP 200; the Mesh Planner
+## Current status and historical command context
+
+At documentation baseline `b8b6f90`, operator evidence has progressed beyond the
+Planner-format failure recorded below: Brave separately passed HTTP 200 and a
+live run reached Drafter. The current blocker is requested
+`google/gemini-2.5-flash` versus returned `response.model` of
+`gemini-2.5-flash`. Exact acceptance remains required; authoritative equivalence
+is not established. No complete live five-agent report has been validated.
+
+The following preparation record and staged commands are preserved as history.
+Do not repeat earlier probes just because they appear below or treat their old
+execution order as a new instruction. Resolve the model-ID contract first,
+review current [live limits and persistence](live_research.md) and obtain separate
+authorization before any future paid/live request. See
+[current evidence and outstanding submission items](submission_readiness.md).
+
+Historical operator result during earlier preparation: Brave separately passed HTTP 200; the Mesh Planner
 probe returned HTTP 200 with `agent_contract_failure` and
 `agent_failure_code: malformed_agent_json`. The actual response format remains
 unknown. A single complete standalone Markdown JSON fence is now supported by

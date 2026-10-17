@@ -6,6 +6,74 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
 Developed by Chabir Ahamad Abusali
 
+## Current status
+
+Documentation baseline: `b8b6f90` on `master`. This table supersedes the historical
+phase records below; it does not describe a completed live research run.
+
+| Area | Evidence at this checkpoint | Status |
+| --- | --- | --- |
+| Offline workflow | Real coordinator and five agents with scripted Mesh responses and local retrieval fixtures | Verified offline only |
+| Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only |
+| Automated verification | Previously recorded 295 passing Python tests and six passing browser scenarios | Baseline evidence; not a new test run for this documentation edit |
+| GitHub Offline CI | [Successful run 38954357490](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/38954357490) for `b8b6f90` | Previously verified; later commits need their own CI evidence |
+| Live connectivity | Operator-reported Mesh HTTP 200 and separate Brave HTTP 200 | Connectivity evidence, not complete research validation |
+| Live partial workflow | Operator-reported run completed Planner, discovery and source retrieval, then reached Drafter | Does not verify later agent contracts |
+| Mesh model identity | Requested `google/gemini-2.5-flash`; Drafter response returned `gemini-2.5-flash` | **Blocked:** exact model check rejects the response; authoritative equivalence is not established |
+| Complete live research | No verified completed live five-agent report, live Verifier assessment or independently checked final live citations | Unverified |
+| Official checker and submission | Inactive template retained; video/submission requirements need operator confirmation | Outstanding; Offline CI does not establish organizer acceptance |
+
+The identifier discrepancy does not establish that Mesh used a different
+underlying model or fallback. Display allowlisting is diagnostic only; it does
+not accept aliases. Earlier Planner JSON-format failures and Brave timeouts are
+historical evidence, not the current blocking stage. See the [submission checklist
+and video script](docs/submission_readiness.md) and [live runner](docs/live_research.md).
+
+## Fresh-checkout quickstart
+
+Use Windows PowerShell 5.1, Git and Python 3.12. From a parent directory where
+`DeepDive_AI` does **not** already exist:
+
+```powershell
+git clone https://github.com/shabir061974-ops/DeepDive_AI.git
+if ($LASTEXITCODE -ne 0) { throw 'Clone failed.' }
+Set-Location -LiteralPath '.\DeepDive_AI'
+py -3.12 -m venv .venv
+if ($LASTEXITCODE -ne 0) { throw 'Virtual environment creation failed.' }
+.\.venv\Scripts\python.exe -m pip install -e '.[backend]'
+if ($LASTEXITCODE -ne 0) { throw 'Installation failed.' }
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed.' }
+.\.venv\Scripts\python.exe -m uvicorn deepdive_ai.api:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+Open http://127.0.0.1:8000/. No API keys or Node build are needed for the demo.
+Installation downloads dependencies; tests and fixtures use no live providers.
+These commands use supported entry points; a fresh install was not rerun during
+this documentation-only update. Reuse an already running dashboard instead of
+starting another instance or stopping it. Keep the server on loopback.
+`main.py` is only a greeting. See [setup details](#local-setup) and
+[browser/test requirements](#verification).
+
+## Six offline scenarios
+
+Every scenario is labeled **OFFLINE FIXTURE DEMO — NO LIVE RESEARCH**. Authored
+fixture bytes and scripted assessments exercise actual backend validation;
+they do not evaluate a live model's research accuracy.
+
+| Scenario | Actual fixture behavior | Outcome |
+| --- | --- | --- |
+| Supported evidence | One supported claim and its citation | Verified report |
+| Direct contradiction | Counterevidence rejects the claim; no research retry | Needs review; no accepted claim |
+| Conflicting sources | One research-again loop adds counterevidence; contradiction veto prevents acceptance | Needs review; insufficient evidence |
+| Evidence gap resolved | One research-again loop adds support and preserves earlier provenance | Verified report |
+| No evidence available | One research-again loop still finds no evidence; claim/assessment model calls are skipped | Needs review; no claims |
+| Malformed assessment | Verifier's scripted JSON violates its contract | Safe failure and audit events; no final report/export |
+
+Fixture citations use authored `.invalid` identifiers. The live runner never
+substitutes fixtures when providers fail. Events and counts come from execution;
+they are not benchmark scores or invented timings.
+
 ## Private credential configuration
 
 Provider settings automatically fall back to the protected private file
@@ -13,8 +81,77 @@ Provider settings automatically fall back to the protected private file
 an explicitly empty value. Use the [masked, one-time PowerShell setup](docs/private_configuration.md).
 No credential file is created automatically and no existing keys are copied.
 Source-only diagnostics and the offline dashboard remain credential-independent.
+The fallback is a fixed Windows path, not a repository `.env` search or model
+configuration file. An empty process key overrides a stored key and fails
+validation. Isolated provider modes call only their selected provider, but
+fallback parses the shared two-key file. Windows ACL inspection uses a bounded,
+metadata-only PowerShell subprocess; file contents are never evaluated as shell
+code. Do not print keys or private file contents to troubleshoot configuration.
 
-## Submission status and demo
+## Execution modes, limits and outputs
+
+| Mode | Local bounds | Data and authorization |
+| --- | --- | --- |
+| Dashboard | Fixed scenarios and bounded fixture workflow | No credentials/external requests; in-memory audit and explicit Markdown download |
+| Provider connectivity | At most one request per selected provider, zero retries; Mesh 15 seconds/64 output tokens, Brave 10 seconds | Offline preflight by default; execution and spending acknowledgements required |
+| Source-only diagnostic | One fixed public-source GET, zero retries/redirects, 10 seconds, 256,000 response bytes | Offline preflight by default; no provider keys; separate execution authorization |
+| Live research CLI | One task, two claims per round, at most one research retry; Mesh <=7 calls, Brave <=2 calls, source <=2 fetches/<=4 HTTP exchanges including redirects | Offline preflight by default; explicit execution, rates and risk acknowledgements; no fixture fallback |
+| Library adapters | Configurable defaults, distinct from the live CLI profile | Generic library retry defaults do not describe live execution |
+
+The live CLI has a 120-second awaited workflow deadline, Mesh 15-second and
+Brave/source 10-second request deadlines, zero client HTTP retries, and 1,024
+output tokens per Mesh call. Timeouts span multiple stages, not a fresh allowance
+per DNS/TCP/TLS/header/body step. Cancellation is not a guaranteed process-exit
+deadline for blocking DNS/worker cleanup. Research-again rounds are distinct
+from HTTP retries. Client limits do not guarantee gateway attempt counts or a
+hard USD ceiling. See [the live profile](docs/live_research.md#fixed-first-run-profile-and-spending-boundary)
+and [isolated connectivity controls](docs/controlled_connectivity.md).
+
+Live execution writes ignored private `reports/live/<run-id>/manifest.json`,
+`audit.jsonl`, `outcome.json` and, on completed workflows, `report.json`. Audit
+events contain metadata; reports contain claims, evidence and source provenance
+and should be treated as private research data. Writes are exclusive and
+flushed/fsynced; crashes/storage failures can leave partial runs. No automatic
+resume or full original-document archive exists. Use a trusted output directory
+with appropriate inherited Windows ACLs. Dashboard audit is in memory, with no
+durable run-history store; its Markdown download is separate from live persistence.
+
+## Troubleshooting
+
+| Symptom | Safe interpretation and next step |
+| --- | --- |
+| Mesh HTTP 200 with `model_matches=false` | HTTP success is not application acceptance. Preserve safe outcome diagnostics and obtain authoritative model-ID confirmation. Do not accept arbitrary aliases or fallback. |
+| Agent JSON failure | Inspect fixed failure codes. Planner supports one complete standalone JSON fence; missing fields, ambiguity and invalid schemas still fail. Drafter/Verifier contracts remain strict. Never infer unavailable response text. |
+| Brave/source timeout | Inspect the last observed stage and source hostname where available. A TCP timeout does not prove authentication failure or source outage. Do not automatically retry or increase budgets. Earlier HTTP 200 does not guarantee later availability. |
+| Missing/unsafe credentials | Check presence without displaying values, empty-process precedence and private-file ACL metadata. Use masked setup; never paste keys into commands or logs. |
+| Unsafe URL/redirect or oversized/invalid document | Retrieval fails closed. Do not bypass DNS/IP, TLS, redirect or extraction checks to obtain a citation. |
+| Port 8000 already in use | Reuse the existing dashboard; do not stop or restart another instance. |
+
+## Publication and CI
+
+The existing [Offline CI workflow](.github/workflows/offline-ci.yml) runs on push
+and pull requests with Windows Server 2025, Python 3.12 and Node 24. It installs
+the backend extra and runs offline Python tests, compilation, JavaScript syntax
+and installed-Chrome smoke checks without provider credentials. Dependency
+installation needs package-index access; offline tests are not live validation.
+
+The official template remains **inactive** at
+[docs/agent-arena-workflow.yml.template](docs/agent-arena-workflow.yml.template).
+It involves submission/provider credentials, OIDC and protected downloaded code.
+Do not activate it without separate review/authorization. Current organizer
+requirements and submission acceptance are not established by Offline CI.
+No license is added; organizer and licensing requirements need confirmation.
+
+## Historical phase records
+
+These records preserve what was known during earlier phases, through the
+Architecture heading. Their checkpoints, counts and statements of unverified
+connectivity are historical, not current status. The [current status table](#current-status)
+takes precedence. Later private-file fallback also means isolated provider modes
+can parse a shared credential file; historical claims of never reading the
+other provider's credentials must not be treated as the current loading contract.
+
+### Historical submission status and demo
 
 The five-agent pipeline is verified end to end with mocked HTTP provider
 responses, and the six-scenario dashboard remains explicitly offline. The
@@ -31,7 +168,7 @@ strict JSON and task-schema validation. [Planner diagnostic findings](docs/plann
 explain the scope and remaining uncertainty. This is offline-tested compatibility,
 not a confirmed fix for the live failure; no new provider request was made.
 
-## Publication and CI readiness
+### Historical publication and CI readiness
 
 Phase 8 preparation starts at `4f415ac` on `master`. The application remains a
 local **OFFLINE FIXTURE DEMO — NO LIVE RESEARCH**. No complete live research run
@@ -53,7 +190,7 @@ checker whose behavior could not be reviewed. Do not activate it until the
 official checks and possible provider usage are separately approved. The public
 workflow template was downloaded; no protected checker or provider was called.
 
-## Phase 9 live-run preparation
+### Historical Phase 9 live-run preparation
 
 From clean checkpoint `3dea62b`, `python -m deepdive_ai.live` now provides an
 explicit real-adapter entry point, defaulting to **offline preflight**. It
@@ -69,7 +206,7 @@ no live run was performed here. The dashboard remains the labeled offline
 fixture demo. GitHub Offline CI success was operator-reported, and its workflow
 is unchanged. The official hackathon checker remains inactive.
 
-## Phase 6 status
+### Historical Phase 6 status
 
 The local dashboard and end-to-end offline fixture demo are implemented from
 clean checkpoint `1ff0e5b`. Start the installed backend from PowerShell:
@@ -603,8 +740,8 @@ they do not prove source truth, source independence or completeness of research.
 Semantic labels remain model judgments and can be wrong, even when quotes are
 exact. Synthesis prevents paraphrase drift but cannot correct a mistaken semantic
 assessment. No real findings, citations or answers
-are bundled; test records are explicitly labeled offline fixtures on `.invalid`
-URLs and never used by application entrypoints.
+are bundled as real research; authored `.invalid` records are used only by the
+explicit offline fixture demo and tests, never as fallback live evidence.
 
 ## Local setup
 
@@ -636,8 +773,8 @@ covered by this CI preparation.
 Future separately authorized live research requires process environment names
 `MESH_API_KEY` and `BRAVE_SEARCH_API_KEY`, an approved model and explicit provider
 budgets. The protected private file is an optional fallback; credential files
-are ignored by Git and excluded from packaging. No full live
-runner or live dashboard endpoint is enabled by these installation commands.
+are ignored by Git and excluded from packaging. These installation commands do
+not execute the existing live CLI. No live dashboard endpoint is provided.
 
 ## Verification
 
@@ -683,17 +820,20 @@ integration. The original 104 tests remain unchanged.
 
 ## Remaining limitations
 
-Official Mesh wire-format/model confirmation and explicitly authorized live
-integration tests; additional discovery providers and search quality evaluation;
-browser-rendered HTML, OCR and better PDF layout/relevance selection; independent
-semantic accuracy evaluation, source-quality assessment and completeness checking;
-persistent evidence/audit storage; authenticated live research endpoints and accounts;
-deployment. Prompts separate untrusted data and forbid embedded instructions, and
+Authoritative Mesh model-identifier confirmation and a completed, independently
+reviewed live five-agent run remain outstanding. Other deferred work includes
+additional discovery providers and search quality evaluation, browser-rendered
+HTML, OCR, better PDF layout/relevance selection, independent semantic accuracy
+evaluation, source-quality/completeness checks, durable dashboard history, a full
+source-document archive, authenticated live research endpoints and deployment.
+Prompts separate untrusted data and forbid embedded instructions, and
 strict schemas/citation/quote checks constrain output, but prompt injection and
 semantic misclassification remain model risks. No live source or model accuracy
 claim is made. The workflow is not started by the greeting or health endpoint.
 
-The Phase 6 dashboard and Phase 7B correction are included in checkpoint `4f415ac`.
-PDF export, persistent run history and live provider operation are deferred.
-The dashboard is a local fixture demonstration, not an authenticated production
-service. No live provider integration, push or deployment was performed.
+The earlier Phase 6/7B dashboard checkpoint was `4f415ac`; current baseline and CI
+evidence are recorded at the top. PDF export and durable dashboard history remain
+deferred. Live adapters, a CLI and file-based audit/report persistence exist;
+complete live research validation does not. The dashboard remains a local
+fixture demonstration, not an authenticated production service. The repository
+is public; no hosted application deployment is claimed.

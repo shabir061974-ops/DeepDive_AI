@@ -3,8 +3,10 @@
 The only automatic file fallback is exactly
 `D:\Developments\DeepDive_AI.env` (beside the repository, not inside it).
 It is not `D:\Developments\DeepDive_AI\.env`. No parent-directory search,
-working-directory discovery, shell execution, interpolation or global Windows
-environment update is performed. No new dependencies are required.
+working-directory discovery, interpolation or global Windows environment update
+is performed. File contents are never evaluated as shell code. On Windows a
+separate, bounded PowerShell process inspects ACL metadata only, as described
+below. No new dependencies are required.
 
 ## One-time masked entry, Windows PowerShell 5.1
 
@@ -58,7 +60,11 @@ Before reading contents, the loader rejects nonregular/symlink/reparse files,
 checks protected Windows ACLs against the current account/SYSTEM/Administrators
 and verifies that the opened file matches the inspected file identity. Windows
 ACL checks use the installed Windows PowerShell executable, with a five-second
-metadata-only subprocess timeout and no profile, prompts or output. Unix
+metadata-only subprocess timeout and no profile or interactive prompts. It uses
+`.NET FileInfo.GetAccessControl` with access/owner sections to inspect metadata,
+not `Get-Content` or provider API calls. Only its internal ACL-check result is
+consumed; credential values are never printed. The one-time setup script sets
+permissions, while this runtime check only verifies them. Unix
 fallback, if used, rejects group/other permission bits. No ACL is modified by
 the loader. An unreadable, oversized, invalid-UTF-8 or unsafe file fails closed
 with a fixed sanitized error. Values never appear in diagnostic reports.
@@ -82,7 +88,10 @@ implementation. Tests use temporary synthetic files only. The actual setup is
 an operator action; future CLI processes load it without restarting the existing
 dashboard. Do not execute live providers as part of setup verification.
 
-Verification: all 290 offline tests passed, including 14 configuration tests.
+Historical configuration implementation verification: all 290 offline tests
+passed, including 14 configuration tests. The latest documented baseline is in
+the [README status table](../README.md#current-status); no private credential file
+was inspected during the documentation consolidation.
 The Windows PowerShell 5.1 setup was exercised only against synthetic temporary
 credentials, validating protected ACLs, overwrite refusal and unsafe-ACL rejection.
 Six browser scenarios, compilation, JavaScript/setup-script syntax, whitespace

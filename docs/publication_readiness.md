@@ -1,5 +1,13 @@
 # Phase 8: publication and CI readiness
 
+> **Historical Phase 8 audit.** Checkpoints, test counts, absent CLI/persistence
+> capabilities and provider-readiness statements below describe that phase.
+> The current baseline is `b8b6f90`; see the [current status](../README.md#current-status)
+> and [submission readiness](submission_readiness.md). The live CLI and private
+> audit/report persistence now exist, Brave has operator-reported HTTP 200,
+> and complete live research remains blocked by exact Mesh model-ID mismatch.
+> This historical record is not authorization to activate the official checker.
+
 Started from verified clean HEAD `4f415ac` on `master`, Python 3.12.10.
 Developed by Chabir Ahamad Abusali. No repository creation, commit, push,
 deployment, live Mesh/Brave requests, paid operations or credential inspection

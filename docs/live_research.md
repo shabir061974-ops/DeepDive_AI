@@ -1,5 +1,23 @@
 # Phase 9: controlled real-adapter research preparation
 
+## Current Phase 10 status
+
+Baseline `b8b6f90`: the live CLI and private audit/report persistence described
+below exist. Operator evidence includes separate Mesh and Brave HTTP 200 and a
+run that completed Planner/discovery/source retrieval before reaching Drafter.
+The current blocker is exact model identity: requested
+`google/gemini-2.5-flash`, returned `gemini-2.5-flash`. No authoritative response
+alias mapping has been established, so acceptance remains exact. Safe diagnostic
+display of either identifier does not authorize either as an alias.
+
+The run failed before Drafter JSON acceptance; live Drafter/Verifier contracts,
+final live synthesis and independently checked final citations remain unverified.
+Earlier Planner rejection and Brave timeout records below are historical,
+not evidence that those are still the latest failing stages. See the
+[current status/CI evidence](../README.md#current-status) and
+[demonstration checklist](submission_readiness.md). Offline preflight cannot
+resolve this provider contract, authenticate credentials or authorize spending.
+
 For the Phase 10 Drafter HTTP-200 metadata rejection and new safe check flags,
 see the [second Mesh validation investigation](second_mesh_validation.md).
 
@@ -53,7 +71,7 @@ Mesh, Brave, retrieval or other external requests were made in this phase.
 No credentials were inspected, spend incurred, checker activated, commit,
 push or deployment performed. Developed by Chabir Ahamad Abusali.
 
-## Existing diagnostics: conclusions and limits
+## Historical Phase 9 diagnostics: conclusions and limits
 
 The retained [Brave timeout investigation](timeout_and_demo_continuity.md)
 records one timed-out request with no HTTP status. Its ten seconds span worker
@@ -64,6 +82,11 @@ result identifies the expired stage. DNS/queue delay, TCP/TLS delay, slow
 sending/headers/body or combined latency remain hypotheses, not a root cause.
 Invalid authentication cannot be inferred from timeout/null status. No timeout,
 retry, destination, TLS or network policy was changed to work around it.
+
+The following paragraph records the Phase 9 JSON behavior; later Planner-only
+support for one complete standalone JSON fence is documented in
+[Planner compatibility](planner_compatibility.md). Drafter/Verifier strict JSON
+rules were not relaxed by that change.
 
 Mesh's operator-reported HTTP 200/text-schema success does not establish agent
 JSON compatibility. The prior exact-OK issue was confined to connectivity and
