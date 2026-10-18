@@ -2,6 +2,22 @@
 
 ## Current Phase 10 status
 
+**Live Mesh timeout adjustment:** the live runner now gives each Mesh exchange
+25 seconds, up from 15, while preserving the 30-second agent operation and
+120-second overall workflow deadlines. Brave/source deadlines remain 10 seconds;
+isolated connectivity diagnostics and generic transport defaults are unchanged.
+This creates additional bounded response-header headroom without adding retries
+or increasing request/token allowances. It does not guarantee completion of all
+seven possible Mesh calls within the overall workflow deadline.
+
+The operator's Mesh dashboard showed the prior request succeeded through Vertex
+AI in 3.4 seconds and cost USD 0.000963, despite the local 15-second header timeout.
+Provider latency alone does not measure end-to-end client/header latency, so the
+root cause remains unresolved. The adjustment is a controlled operational trial,
+not a claim that the network issue is fixed. Mocked virtual-header tests cover
+20-second responses succeeding under the new budget, rejection under the old
+budget, timeout beyond the new budget, and unchanged routing rejection/auditing.
+
 **Support-confirmed update, October 18, 2026:** the exact Gemini identifier pair
 is now accepted for non-streaming responses with a valid response version at
 least `2026-08`, explicit fallback `false` and no routing-model header. See the
@@ -167,7 +183,7 @@ put secrets into questions or untrusted research content.
 | Model | Explicit <=120-character identifier; exact served-model match |
 | Tasks / claims | At most one task and two claims per round |
 | Research retries | One, hence at most two rounds |
-| Mesh | At most seven client HTTP attempts total, no retries, 15 seconds each |
+| Mesh | At most seven client HTTP attempts total, no retries, 25 seconds each |
 | Mesh output | 1,024 requested tokens each; valid reported usage required and <=1,024 |
 | Mesh bytes | 24,000 request-body bytes; 32,768 response bytes per request |
 | Brave | At most two GETs, one result per search, no retries, ten seconds each |

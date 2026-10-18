@@ -111,7 +111,7 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audit[-1]["kind"], "completed")
         self.assertEqual(json.loads((folder / "outcome.json").read_text()), result)
         for request in mesh.calls:
-            self.assertEqual(request.timeout_seconds, 15)
+            self.assertEqual(request.timeout_seconds, 25)
             self.assertEqual(json.loads(request.body)["max_tokens"], 1024)
             self.assertEqual(request.url, "https://api.meshapi.ai/v1/chat/completions")
         self.assertEqual(search.calls[0].timeout_seconds, 10)

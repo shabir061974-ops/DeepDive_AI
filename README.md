@@ -163,7 +163,7 @@ code. Do not print keys or private file contents to troubleshoot configuration.
 | Live research CLI | One task, two claims per round, at most one research retry; Mesh <=7 calls, Brave <=2 calls, source <=2 fetches/<=4 HTTP exchanges including redirects | Offline preflight by default; explicit execution, rates and risk acknowledgements; no fixture fallback |
 | Library adapters | Configurable defaults, distinct from the live CLI profile | Generic library retry defaults do not describe live execution |
 
-The live CLI has a 120-second awaited workflow deadline, Mesh 15-second and
+The live CLI has a 120-second awaited workflow deadline, Mesh 25-second and
 Brave/source 10-second request deadlines, zero client HTTP retries, and 1,024
 output tokens per Mesh call. Timeouts span multiple stages, not a fresh allowance
 per DNS/TCP/TLS/header/body step. Cancellation is not a guaranteed process-exit
@@ -171,6 +171,14 @@ deadline for blocking DNS/worker cleanup. Research-again rounds are distinct
 from HTTP retries. Client limits do not guarantee gateway attempt counts or a
 hard USD ceiling. See [the live profile](docs/live_research.md#fixed-first-run-profile-and-spending-boundary)
 and [isolated connectivity controls](docs/controlled_connectivity.md).
+
+The live Mesh budget was increased from 15 to 25 seconds after an operator
+dashboard record confirmed a remotely successful, billed request whose local
+client timed out at response headers. This is bounded operational tuning, not
+proof of the underlying latency cause or a successful live fix. It remains below
+the unchanged 30-second agent deadline; the 120-second workflow deadline can
+terminate a run before every request allowance is used. Isolated connectivity
+diagnostics retain their original 15-second Mesh limit.
 
 Live execution writes ignored private `reports/live/<run-id>/manifest.json`,
 `audit.jsonl`, `outcome.json` and, on completed workflows, `report.json`. Audit

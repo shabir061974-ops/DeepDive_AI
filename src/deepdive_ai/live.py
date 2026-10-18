@@ -27,7 +27,7 @@ from .workflow import WorkflowPolicy
 
 PROFILE = {"mesh_requests": 7, "brave_requests": 2, "source_requests": 4,
            "http_retries": 0, "research_retries": 1, "tasks": 1, "claims": 2,
-           "output_tokens_per_mesh_request": 1024, "mesh_timeout_seconds": 15,
+           "output_tokens_per_mesh_request": 1024, "mesh_timeout_seconds": 25,
            "brave_timeout_seconds": 10, "source_timeout_seconds": 10,
            "overall_timeout_seconds": 120}
 
@@ -196,7 +196,7 @@ async def run_live(
     if result["blockers"]:
         return result
     try:
-        mesh_settings = MeshSettings.from_environment(environment, policy=policy(15, 7, 32_768), max_output_tokens=1024)
+        mesh_settings = MeshSettings.from_environment(environment, policy=policy(PROFILE["mesh_timeout_seconds"], 7, 32_768), max_output_tokens=1024)
         brave_settings = BraveSearchSettings.from_environment(environment, policy=policy(10, 2, 16_384))
     except Exception:
         result["blockers"].append("provider_credentials_missing_or_invalid")
