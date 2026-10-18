@@ -3,20 +3,21 @@
 import argparse
 import asyncio
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from .agents.common import AgentLimits, AgentOutputError
+from .audit import AuditEvent, AuditKind
 from .connectivity import TestOptions, _rate
 from .extraction import BoundedContentExtractor, ExtractionSettings
 from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
     PublicHTTPTransport, RequestPolicy, status_category, validate_url,
 )
-from .mesh import MeshAPIClient, MeshSettings, mesh_identity_checks
+from .mesh import MeshAPIClient, MeshSettings, mesh_identity_checks, mesh_routing_rejection_codes
 from .models import ResearchQuestion, nonempty
 from .persistence import JsonlAuditSink, write_record
 from .retrieval import HTTPWebRetriever, RetrievalSettings
@@ -91,6 +92,7 @@ class ObservedTransport:
         self.attempts += 1
         validation_checks = None
         model_diagnostics = None
+        routing_codes = ()
         hostname = None
         if self.source_diagnostics:
             try:
@@ -123,6 +125,8 @@ class ObservedTransport:
                         raise ValueError
                     model_diagnostics = _model_identity_diagnostics(data)
                     validation_checks.update(mesh_identity_checks(response, self.model, data.get("model")))
+                    if not validation_checks["routing_metadata_valid"]:
+                        routing_codes = mesh_routing_rejection_codes(response)
                     usage = data.get("usage")
                     validation_checks["usage_object"] = isinstance(usage, dict)
                     if not isinstance(usage, dict):
@@ -147,6 +151,8 @@ class ObservedTransport:
             if error.category == FailureCategory.VALIDATION and validation_checks is not None:
                 self.failure["mesh_validation_checks"] = validation_checks
                 self.failure.update(model_diagnostics)
+                if routing_codes:
+                    self.failure["routing_rejection_codes"] = list(routing_codes)
             raise
         except asyncio.CancelledError:
             # wait_for cancels the inner transport before raising TimeoutError
@@ -155,6 +161,22 @@ class ObservedTransport:
             self._record_failure({"category": "request_cancelled", "stage": stage.value if stage else None,
                                   "http_status": status}, hostname)
             raise
+
+
+class _RoutingAuditSink:
+    """Enrich the existing failure event; no extra events or raw metadata."""
+
+    def __init__(self, sink: JsonlAuditSink, observers: Mapping[str, ObservedTransport]):
+        self.sink = sink
+        self.observers = observers
+
+    def emit(self, event: AuditEvent) -> None:
+        mesh = self.observers.get("mesh")
+        if event.kind == AuditKind.FAILED and mesh is not None and mesh.failure:
+            codes = tuple(mesh.failure.get("routing_rejection_codes", ()))
+            if codes:
+                event = replace(event, routing_rejection_codes=codes)
+        self.sink.emit(event)
 
 
 def http_failure(error: BaseException) -> dict | None:
@@ -229,7 +251,7 @@ async def run_live(
             mesh=MeshAPIClient(mesh_settings, observers["mesh"]), model=options.model,
             discovery=BraveSearchDiscovery(brave_settings, observers["brave"]),
             retriever=HTTPWebRetriever(RetrievalSettings(policy=policy(10, 4, 256_000), max_redirects=1), observers["source"]),
-            audit=sink, limits=limits, policy=WorkflowPolicy(max_research_retries=1, max_tasks=1, max_claims=2),
+            audit=_RoutingAuditSink(sink, observers), limits=limits, policy=WorkflowPolicy(max_research_retries=1, max_tasks=1, max_claims=2),
             extractor=BoundedContentExtractor(ExtractionSettings(max_input_bytes=256_000, max_pages=3)))
         async with asyncio.timeout(120):
             report = await workflow.run(ResearchQuestion(run_id, options.question), run_id=run_id)

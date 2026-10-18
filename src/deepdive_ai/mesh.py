@@ -13,6 +13,7 @@ from .http_transport import (
 
 from .models import nonempty
 from .configuration import provider_key
+from .audit import RoutingRejectionCode
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,45 @@ def mesh_identity_checks(response: HTTPResponse, requested: str, returned: objec
     normalized = (type(returned) is str and requested in pair and returned in pair
                   and version_valid and version >= "2026-08" and len(values["x-mesh-version"]) == 1)
     return {"model_matches": bool(exact or normalized), "routing_metadata_valid": bool(valid)}
+
+
+def mesh_routing_rejection_codes(response: HTTPResponse) -> tuple[RoutingRejectionCode, ...]:
+    """Diagnostics only. Do not use these codes to make acceptance decisions."""
+    names = ("x-mesh-version", "x-mesh-routing-model", "x-mesh-routing-fallback", "x-mesh-routing-attempts")
+    values = {name: [] for name in names}
+    for key, value in response.headers:
+        if isinstance(key, str) and key.lower() in values:
+            values[key.lower()].append(value)
+
+    def one(name: str) -> str | None:
+        items = values[name]
+        return items[0] if len(items) == 1 and type(items[0]) is str else None
+
+    found = set()
+    if any(len(items) > 1 for items in values.values()):
+        found.add(RoutingRejectionCode.DUPLICATE_METADATA)
+    if any(not (type(v) is str and v.isascii() and len(v) <= 120
+                and all(33 <= ord(c) <= 126 for c in v)) for items in values.values() for v in items):
+        found.add(RoutingRejectionCode.INVALID_METADATA_VALUE)
+    fallback = values["x-mesh-routing-fallback"]
+    if not fallback:
+        found.add(RoutingRejectionCode.FALLBACK_MISSING)
+    else:
+        if any(type(v) is str and v == "true" for v in fallback):
+            found.add(RoutingRejectionCode.FALLBACK_TRUE)
+        if one("x-mesh-routing-fallback") not in ("true", "false"):
+            found.add(RoutingRejectionCode.FALLBACK_INVALID)
+    if values["x-mesh-routing-model"]:
+        found.add(RoutingRejectionCode.ROUTING_MODEL_PRESENT)
+    version = one("x-mesh-version")
+    if values["x-mesh-version"] and not (version is not None
+            and re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", version) is not None and int(version[:4]) > 0):
+        found.add(RoutingRejectionCode.INVALID_VERSION)
+    attempts = one("x-mesh-routing-attempts")
+    if values["x-mesh-routing-attempts"] and (attempts is None or not attempts.isascii()
+            or not attempts.isdecimal() or len(attempts) > 6 or int(attempts) < 1):
+        found.add(RoutingRejectionCode.INVALID_ATTEMPTS)
+    return tuple(code for code in RoutingRejectionCode if code in found)
 
 
 def _json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:

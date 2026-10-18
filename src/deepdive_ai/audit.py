@@ -19,6 +19,17 @@ class AuditKind(StrEnum):
     FAILED = "failed"
 
 
+class RoutingRejectionCode(StrEnum):
+    FALLBACK_MISSING = "fallback_missing"
+    FALLBACK_TRUE = "fallback_true"
+    FALLBACK_INVALID = "fallback_invalid"
+    ROUTING_MODEL_PRESENT = "routing_model_present"
+    DUPLICATE_METADATA = "duplicate_metadata"
+    INVALID_VERSION = "invalid_version"
+    INVALID_ATTEMPTS = "invalid_attempts"
+    INVALID_METADATA_VALUE = "invalid_metadata_value"
+
+
 @dataclass(frozen=True)
 class AuditEvent:
     run_id: str
@@ -26,6 +37,7 @@ class AuditEvent:
     kind: AuditKind
     attempt: int
     occurred_at: datetime
+    routing_rejection_codes: tuple[RoutingRejectionCode, ...] = ()
 
     def __post_init__(self) -> None:
         nonempty(self.run_id, "run id")
@@ -35,6 +47,12 @@ class AuditEvent:
         if type(self.attempt) is not int or self.attempt < 0:
             raise ValueError("attempt must be a nonnegative integer")
         aware(self.occurred_at)
+        codes = self.routing_rejection_codes
+        if (not isinstance(codes, tuple) or len(codes) > len(RoutingRejectionCode)
+                or any(not isinstance(code, RoutingRejectionCode) for code in codes)
+                or len(set(codes)) != len(codes)
+                or (codes and self.kind != AuditKind.FAILED)):
+            raise ValueError("Invalid routing audit codes")
 
 
 class AuditSink(Protocol):

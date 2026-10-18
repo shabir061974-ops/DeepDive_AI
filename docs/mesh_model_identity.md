@@ -47,6 +47,23 @@ prompts, completions and credentials are not added to logs or persisted outcomes
 Connectivity retains safe parsed usage and failed-check names for identity failures
 after the completion schema has passed.
 
+Live routing failures additionally persist an allowlisted `routing_rejection_codes`
+list in `outcome.json` and the existing `failed` event in `audit.jsonl`:
+`fallback_missing`, `fallback_true`, `fallback_invalid`, `routing_model_present`,
+`duplicate_metadata`, `invalid_version`, `invalid_attempts`, and
+`invalid_metadata_value`. Multiple applicable codes may appear, in fixed order.
+For example, duplicate fallback fields also prevent reading a single valid
+fallback value, so both `duplicate_metadata` and `fallback_invalid` can appear.
+
+These are diagnostic classifications, not a new acceptance policy. The existing
+model/routing validator remains unchanged; a separate helper describes its
+rejections without retaining header values. Audit codes are typed, unique,
+bounded to the eight fixed values and permitted only on failure events. Other
+events have an empty code list. No extra audit event or network request is added.
+Offline tests cover every category, accepted metadata, overlapping malformed
+metadata, persistence and secret redaction. Earlier failed runs contain no such
+codes and cannot be reconstructed from this update; no live rerun is implied.
+
 This deliberately tightens earlier behavior that treated missing/malformed
 routing data or reported fallback as warnings. Historical phase records describe
 that old behavior and do not override this policy. Header absence can therefore
