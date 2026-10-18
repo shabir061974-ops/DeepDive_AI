@@ -41,7 +41,7 @@ class MeshTransport:
         if callable(result):
             result = result(payload)
         text = result if isinstance(result, str) else json.dumps(result)
-        return HTTPResponse(200, HEADERS, json.dumps({"id": "private-response-id", "model": OPTIONS.model,
+        return HTTPResponse(200, HEADERS + (("X-Mesh-Version", "2026-08"), ("X-Mesh-Routing-Fallback", "false")), json.dumps({"id": "private-response-id", "model": OPTIONS.model,
             "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}).encode())
 

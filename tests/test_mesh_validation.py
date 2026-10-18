@@ -56,7 +56,7 @@ class MeshValidationTests(unittest.IsolatedAsyncioTestCase):
         result = await self.run_response(HTTPResponse(200, headers, fixture.body),
                                          options=replace(OPTIONS, mesh_version="2026-08"))
         self.assertEqual(result["diagnostics"]["failed_checks"], [
-            "model_matches", "expected_version_matches", "output_limit_satisfied"])
+            "model_matches", "routing_metadata_valid", "expected_version_matches", "output_limit_satisfied"])
         self.assertFalse(result["diagnostics"]["reply_matches"])
         self.assertEqual(result["status"], "failed")
         self.assertIsNone(result["estimated_cost_usd"])
@@ -66,7 +66,7 @@ class MeshValidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "passed")
         self.assertEqual(result["diagnostics"]["failed_checks"], [])
         self.assertEqual(result["diagnostics"]["validation_checks"], {
-            "response_schema_compatible": True, "model_matches": True, "expected_version_matches": None,
+            "response_schema_compatible": True, "model_matches": True, "routing_metadata_valid": True, "expected_version_matches": None,
             "output_limit_satisfied": True})
         self.assertTrue(result["diagnostics"]["reply_matches"])
 

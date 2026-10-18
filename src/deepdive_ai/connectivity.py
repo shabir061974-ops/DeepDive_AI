@@ -12,7 +12,7 @@ from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
     PublicHTTPTransport, RequestPolicy, status_category,
 )
-from .mesh import MeshAPIClient, MeshRequest, MeshSettings
+from .mesh import MeshAPIClient, MeshIdentityError, MeshRequest, MeshSettings, mesh_identity_checks
 from .retrieval import SearchRequest
 from .search import BraveSearchDiscovery, BraveSearchSettings
 
@@ -85,14 +85,19 @@ class _Observation:
             return False, None, {}
         # Called only after MeshAPIClient has validated the JSON and completion.
         data = json.loads(response.body.decode("utf-8"))
-        compatible = data.get("model") == MODEL
-        version_matches = None if version is None else response.header("X-Mesh-Version") == version
+        def metadata_header(name: str) -> str | None:
+            values = [v for k, v in response.headers if k.lower() == name.lower()]
+            return values[0] if len(values) == 1 and type(values[0]) is str and len(values[0]) <= 120 else None
+
+        identity = mesh_identity_checks(response, MODEL, data.get("model"))
+        compatible = all(identity.values())
+        version_matches = None if version is None else metadata_header("X-Mesh-Version") == version
         if version_matches is False:
             compatible = False
-        raw_attempts = response.header("X-Mesh-Routing-Attempts")
+        raw_attempts = metadata_header("X-Mesh-Routing-Attempts")
         attempts = (int(raw_attempts) if raw_attempts is not None and len(raw_attempts) <= 6
                     and raw_attempts.isascii() and raw_attempts.isdecimal() and int(raw_attempts) > 0 else None)
-        raw_fallback = response.header("X-Mesh-Routing-Fallback")
+        raw_fallback = metadata_header("X-Mesh-Routing-Fallback")
         fallback = {"true": True, "false": False}.get(raw_fallback)
         warnings = []
         if attempts is None:
@@ -107,8 +112,9 @@ class _Observation:
             warnings.append("mesh_version_not_checked")
         diagnostics = {"gateway_attempts_reported": attempts, "gateway_fallback_reported": fallback,
                        "version_matches": version_matches, "warnings": warnings,
+                       "reply_matches": data["choices"][0]["message"]["content"].strip() == "OK",
                        "validation_checks": {"response_schema_compatible": True,
-                                             "model_matches": data.get("model") == MODEL,
+                                             **identity,
                                              "expected_version_matches": version_matches}}
         usage = data.get("usage")
         names = ("prompt_tokens", "completion_tokens", "total_tokens")
@@ -206,6 +212,13 @@ async def run_connectivity(
                     active["estimated_cost_usd"] = format(cost, "f")
     except Exception as error:
         # Never format exceptions: even injected transports may contain secrets.
+        if isinstance(error, MeshIdentityError) and observer is mesh:
+            _, usage, diagnostics = mesh.mesh_metadata(options.mesh_version)
+            checks = diagnostics["validation_checks"]
+            checks["output_limit_satisfied"] = None if usage is None else usage["completion_tokens"] <= 64
+            diagnostics["failed_checks"] = [name for name, passed in checks.items()
+                if passed is False or (name == "output_limit_satisfied" and passed is None)]
+            active.update(token_usage=usage, diagnostics=diagnostics)
         active["status"] = "failed"
         active["response_compatible"] = False
         category = (error.category if isinstance(error, HTTPError) else

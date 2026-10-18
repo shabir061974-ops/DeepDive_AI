@@ -46,10 +46,10 @@ class ScriptedTransport:
 
 
 def completion(**changes):
-    data = {"id": "fixture-completion", "choices": [{
+    data = {"id": "fixture-completion", "model": "model", "choices": [{
         "message": {"role": "assistant", "content": "offline response"}, "finish_reason": "stop"}]}
     data.update(changes)
-    return HTTPResponse(200, JSON_HEADERS, json.dumps(data).encode())
+    return HTTPResponse(200, JSON_HEADERS + (("X-Mesh-Routing-Fallback", "false"),), json.dumps(data).encode())
 
 
 class NoNetworkTests(unittest.IsolatedAsyncioTestCase):
@@ -67,7 +67,7 @@ class MeshTests(NoNetworkTests):
         return MeshAPIClient(MeshSettings(KEY, policy=replace(POLICY, **policy)), transport)
 
     async def test_success_uses_mesh_only_and_correct_payload(self):
-        transport = ScriptedTransport(completion())
+        transport = ScriptedTransport(completion(model="configured-model"))
         result = await self.client(transport).complete(MeshRequest("configured-model", PROMPT))
         self.assertEqual(result.text, "offline response")
         self.assertEqual(result.request_id, "fixture-completion")

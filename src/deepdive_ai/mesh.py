@@ -2,11 +2,12 @@
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Mapping, Protocol
 
 from .http_transport import (
-    BoundedHTTPClient, HTTPError, HTTPTransport, PublicHTTPTransport,
+    BoundedHTTPClient, FailureCategory, HTTPError, HTTPResponse, HTTPTransport, PublicHTTPTransport,
     RequestLimitExceeded, RequestPolicy, positive_int,
 )
 
@@ -84,6 +85,48 @@ class MeshError(HTTPError):
     """Sanitized Mesh failure; upstream bodies and credentials are never echoed."""
 
 
+class MeshIdentityError(MeshError):
+    """Completion schema passed, but model/routing acceptance failed."""
+
+    default_category = FailureCategory.VALIDATION
+
+
+def mesh_identity_checks(response: HTTPResponse, requested: str, returned: object) -> dict[str, bool]:
+    """Support-confirmed non-streaming policy; never return raw header values.
+
+    Only the exact Gemini pair is equivalent, starting at API version 2026-08.
+    A routing-model header signals another model, even if its text looks familiar.
+    Missing fallback metadata cannot establish that no backup provider answered.
+    """
+    names = ("x-mesh-version", "x-mesh-routing-model", "x-mesh-routing-fallback", "x-mesh-routing-attempts")
+    values = {name: [] for name in names}
+    for key, value in response.headers:
+        if isinstance(key, str) and key.lower() in values:
+            values[key.lower()].append(value)
+    valid = all(len(items) <= 1 and all(type(v) is str and v.isascii() and len(v) <= 120
+                and all(33 <= ord(c) <= 126 for c in v) for v in items) for items in values.values())
+
+    def one(name: str) -> str | None:
+        items = values[name]
+        return items[0] if len(items) == 1 and type(items[0]) is str else None
+
+    version = one("x-mesh-version")
+    version_valid = (version is not None and re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", version) is not None
+                     and int(version[:4]) > 0)
+    if values["x-mesh-version"] and not version_valid:
+        valid = False
+    attempts = one("x-mesh-routing-attempts")
+    if values["x-mesh-routing-attempts"] and (attempts is None or not attempts.isascii()
+            or not attempts.isdecimal() or len(attempts) > 6 or int(attempts) < 1):
+        valid = False
+    valid = valid and not values["x-mesh-routing-model"] and one("x-mesh-routing-fallback") == "false"
+    exact = type(returned) is str and returned == requested
+    pair = frozenset({"google/gemini-2.5-flash", "gemini-2.5-flash"})
+    normalized = (type(returned) is str and requested in pair and returned in pair
+                  and version_valid and version >= "2026-08" and len(values["x-mesh-version"]) == 1)
+    return {"model_matches": bool(exact or normalized), "routing_metadata_valid": bool(valid)}
+
+
 def _json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -154,6 +197,9 @@ class MeshAPIClient:
                     or message.get("role") != "assistant" or message.get("tool_calls")
                     or not isinstance(message.get("content"), str)):
                 raise ValueError
-            return MeshResponse(message["content"], data["id"])
+            completion = MeshResponse(message["content"], data["id"])
+            if not all(mesh_identity_checks(response, request.model, data.get("model")).values()):
+                raise MeshIdentityError("Mesh model or routing metadata rejected", http_status=200)
+            return completion
         except (ValueError, TypeError, KeyError, RecursionError):
             raise MeshError("Mesh returned a malformed or incomplete completion") from None

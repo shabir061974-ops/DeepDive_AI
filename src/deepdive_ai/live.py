@@ -16,7 +16,7 @@ from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
     PublicHTTPTransport, RequestPolicy, status_category, validate_url,
 )
-from .mesh import MeshAPIClient, MeshSettings
+from .mesh import MeshAPIClient, MeshSettings, mesh_identity_checks
 from .models import ResearchQuestion, nonempty
 from .persistence import JsonlAuditSink, write_record
 from .retrieval import HTTPWebRetriever, RetrievalSettings
@@ -111,7 +111,7 @@ class ObservedTransport:
             if self.model is not None and response.status == 200:
                 # The Mesh client independently validates strict JSON/completion shape.
                 # This runner additionally requires the selected model and bounded usage.
-                validation_checks = dict.fromkeys(("response_json_valid", "root_object", "model_matches",
+                validation_checks = dict.fromkeys(("response_json_valid", "root_object", "model_matches", "routing_metadata_valid",
                     "usage_object", "token_fields_valid", "token_total_matches", "output_limit_satisfied"), False)
                 model_diagnostics = {"model_field_present": False, "model_field_type": "unavailable",
                                      "public_model_identifier": None}
@@ -122,7 +122,7 @@ class ObservedTransport:
                     if not isinstance(data, dict):
                         raise ValueError
                     model_diagnostics = _model_identity_diagnostics(data)
-                    validation_checks["model_matches"] = data.get("model") == self.model
+                    validation_checks.update(mesh_identity_checks(response, self.model, data.get("model")))
                     usage = data.get("usage")
                     validation_checks["usage_object"] = isinstance(usage, dict)
                     if not isinstance(usage, dict):

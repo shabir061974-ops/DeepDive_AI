@@ -2,6 +2,15 @@
 
 ## Current Phase 10 status
 
+**Support-confirmed update, October 18, 2026:** the exact Gemini identifier pair
+is now accepted for non-streaming responses with a valid response version at
+least `2026-08`, explicit fallback `false` and no routing-model header. See the
+[shared identity/routing policy](mesh_model_identity.md). This supersedes the
+identity-equivalence uncertainty in the baseline record below; it does not
+establish a successful live retest or change key provider pinning or spending gates.
+
+### Historical baseline identity finding
+
 Baseline `b8b6f90`: the live CLI and private audit/report persistence described
 below exist. Operator evidence includes separate Mesh and Brave HTTP 200 and a
 run that completed Planner/discovery/source retrieval before reaching Drafter.

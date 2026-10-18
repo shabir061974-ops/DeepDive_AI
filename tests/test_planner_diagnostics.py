@@ -80,7 +80,7 @@ class DocumentedPlannerProbeTests(unittest.TestCase):
                 body = {"id": "private-id", "model": model,
                         "choices": [{"finish_reason": finish, "message": {"role": "assistant", "content": content}}],
                         "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}
-                return HTTPResponse(200, (("Content-Type", "application/json"),), json.dumps(body).encode())
+                return HTTPResponse(200, (("Content-Type", "application/json"), ("X-Mesh-Routing-Fallback", "false")), json.dumps(body).encode())
 
         def factory():
             if not execute:

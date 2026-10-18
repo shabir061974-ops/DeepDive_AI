@@ -126,15 +126,15 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(report["mesh"]["estimated_cost_usd"])
             self.assertEqual(len(mesh.calls), 1)
 
-    async def test_no_version_or_routing_headers_needed_for_connectivity(self):
+    async def test_exact_model_needs_no_version_but_requires_explicit_no_fallback(self):
         report, brave, mesh = await self.run_fixture(
-            options=replace(OPTIONS, mesh_version=None), mesh=Transport(mesh_response(headers=JSON_HEADERS)))
+            options=replace(OPTIONS, mesh_version=None), mesh=Transport(mesh_response(headers=JSON_HEADERS + (("X-Mesh-Routing-Fallback", "false"),))))
         self.assertTrue(report["ready"])
         self.assertEqual(report["mesh"]["status"], "passed")
         self.assertEqual(report["mesh"]["diagnostics"], {
-            "gateway_attempts_reported": None, "gateway_fallback_reported": None, "version_matches": None,
-            "warnings": ["gateway_attempts_unverified", "gateway_fallback_unverified", "mesh_version_not_checked"],
-            "validation_checks": {"response_schema_compatible": True, "model_matches": True,
+            "gateway_attempts_reported": None, "gateway_fallback_reported": False, "version_matches": None,
+            "warnings": ["gateway_attempts_unverified", "mesh_version_not_checked"],
+            "validation_checks": {"response_schema_compatible": True, "model_matches": True, "routing_metadata_valid": True,
                                   "expected_version_matches": None,
                                   "output_limit_satisfied": True},
             "reply_matches": True,
@@ -147,11 +147,11 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
         headers = JSON_HEADERS + (("X-Mesh-Routing-Attempts", "3"), ("X-Mesh-Routing-Fallback", "true"))
         report, _, mesh = await self.run_fixture(options=replace(OPTIONS, mesh_version=None),
                                                  mesh=Transport(mesh_response(headers=headers)))
-        self.assertEqual(report["mesh"]["status"], "passed")
+        self.assertEqual(report["mesh"]["status"], "failed")
         self.assertEqual(report["mesh"]["attempts"], 1)
         self.assertEqual(report["mesh"]["diagnostics"]["gateway_attempts_reported"], 3)
         self.assertIn("gateway_fallback_reported", report["mesh"]["diagnostics"]["warnings"])
-        self.assertEqual(report["mesh"]["cost_status"], "response_usage_estimate_not_total_bill")
+        self.assertEqual(report["mesh"]["cost_status"], "unknown_failure_may_be_billable")
         self.assertEqual(len(mesh.calls), 1)
 
     async def test_invalid_gateway_metadata_never_echoes_raw_values(self):
@@ -160,7 +160,7 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
                                       ("X-Mesh-Routing-Fallback", "sensitive-header"))
             report, _, _ = await self.run_fixture(options=replace(OPTIONS, mesh_version=None),
                                                   mesh=Transport(mesh_response(headers=headers)))
-            self.assertEqual(report["mesh"]["status"], "passed")
+            self.assertEqual(report["mesh"]["status"], "failed")
             self.assertIsNone(report["mesh"]["diagnostics"]["gateway_attempts_reported"])
             self.assertNotIn("sensitive-header", json.dumps(report))
 

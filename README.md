@@ -8,24 +8,27 @@ Developed by Chabir Ahamad Abusali
 
 ## Current status
 
-Documentation baseline: `b8b6f90` on `master`. This table supersedes the historical
+Published baseline: `4079cdf` on `master`; the model policy below describes the
+current offline compatibility change. This table supersedes the historical
 phase records below; it does not describe a completed live research run.
 
 | Area | Evidence at this checkpoint | Status |
 | --- | --- | --- |
 | Offline workflow | Real coordinator and five agents with scripted Mesh responses and local retrieval fixtures | Verified offline only |
 | Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only |
-| Automated verification | Previously recorded 295 passing Python tests and six passing browser scenarios | Baseline evidence; not a new test run for this documentation edit |
-| GitHub Offline CI | [Successful run 38954357490](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/38954357490) for `b8b6f90` | Previously verified; later commits need their own CI evidence |
+| Automated verification | Published baseline recorded 302 passing Python tests and six passing browser scenarios | Baseline evidence; later changes need their own verification |
+| GitHub Offline CI | [Successful run 39022921269](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39022921269) for `4079cdf` | Previously verified; later commits need their own CI evidence |
 | Live connectivity | Operator-reported Mesh HTTP 200 and separate Brave HTTP 200 | Connectivity evidence, not complete research validation |
 | Live partial workflow | Operator-reported run completed Planner, discovery and source retrieval, then reached Drafter | Does not verify later agent contracts |
-| Mesh model identity | Requested `google/gemini-2.5-flash`; Drafter response returned `gemini-2.5-flash` | **Blocked:** exact model check rejects the response; authoritative equivalence is not established |
+| Mesh model identity | Support confirmed the exact Gemini identifier pair for API 2026-08 onward | Non-streaming compatibility implemented offline with strict version/routing checks; no live retest claimed |
 | Complete live research | No verified completed live five-agent report, live Verifier assessment or independently checked final live citations | Unverified |
 | Official checker and submission | Inactive template retained; video/submission requirements need operator confirmation | Outstanding; Offline CI does not establish organizer acceptance |
 
 The identifier discrepancy does not establish that Mesh used a different
-underlying model or fallback. Display allowlisting is diagnostic only; it does
-not accept aliases. Earlier Planner JSON-format failures and Brave timeouts are
+underlying model or fallback. Display allowlisting remains diagnostic only.
+The [support-confirmed acceptance policy](docs/mesh_model_identity.md) allows only
+the exact pair on a confirmed supported response version, requires explicit
+no-fallback metadata, and rejects any routing-model header. Earlier Planner JSON-format failures and Brave timeouts are
 historical evidence, not the current blocking stage. See the [submission checklist
 and video script](docs/submission_readiness.md) and [live runner](docs/live_research.md).
 
@@ -89,8 +92,8 @@ assessments**, not live semantic accuracy, independent source truth, search
 quality, research completeness or organizer-checker acceptance. The scripted
 verifier deliberately proposes positive verdicts; actual production vetoes must
 reject contradictory or insufficient assessments. This cannot detect a real
-model incorrectly calling an unrelated excerpt supportive. The unresolved Mesh
-model-ID mismatch and incomplete live validation remain unchanged.
+model incorrectly calling an unrelated excerpt supportive. Mesh naming now has
+support-confirmed offline compatibility; complete live validation remains outstanding.
 
 | Case | Final supported/unsupported/insufficient claims | Accepted citations traceable | Unsafe acceptances | Contradiction safeguard | Retries observed/expected |
 | --- | --- | --- | --- | --- | --- |
@@ -182,7 +185,7 @@ durable run-history store; its Markdown download is separate from live persisten
 
 | Symptom | Safe interpretation and next step |
 | --- | --- |
-| Mesh HTTP 200 with `model_matches=false` | HTTP success is not application acceptance. Preserve safe outcome diagnostics and obtain authoritative model-ID confirmation. Do not accept arbitrary aliases or fallback. |
+| Mesh HTTP 200 with identity/routing rejection | Inspect `model_matches` and `routing_metadata_valid`. Only the confirmed Gemini pair may normalize on version 2026-08 onward. Missing fallback metadata, any routing-model header, fallback or malformed metadata still fails closed. Do not bypass validation. |
 | Agent JSON failure | Inspect fixed failure codes. Planner supports one complete standalone JSON fence; missing fields, ambiguity and invalid schemas still fail. Drafter/Verifier contracts remain strict. Never infer unavailable response text. |
 | Brave/source timeout | Inspect the last observed stage and source hostname where available. A TCP timeout does not prove authentication failure or source outage. Do not automatically retry or increase budgets. Earlier HTTP 200 does not guarantee later availability. |
 | Missing/unsafe credentials | Check presence without displaying values, empty-process precedence and private-file ACL metadata. Use masked setup; never paste keys into commands or logs. |
@@ -882,8 +885,8 @@ integration. The original 104 tests remain unchanged.
 
 ## Remaining limitations
 
-Authoritative Mesh model-identifier confirmation and a completed, independently
-reviewed live five-agent run remain outstanding. Other deferred work includes
+Support-confirmed model normalization is implemented offline; a completed,
+independently reviewed live five-agent run remains outstanding. Other deferred work includes
 additional discovery providers and search quality evaluation, browser-rendered
 HTML, OCR, better PDF layout/relevance selection, independent semantic accuracy
 evaluation, source-quality/completeness checks, durable dashboard history, a full

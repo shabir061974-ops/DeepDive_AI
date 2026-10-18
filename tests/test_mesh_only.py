@@ -25,7 +25,7 @@ def completion(**changes):
             "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "OK"}}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}}
     body.update(changes)
-    return HTTPResponse(200, (("Content-Type", "application/json"),), json.dumps(body).encode())
+    return HTTPResponse(200, (("Content-Type", "application/json"), ("X-Mesh-Routing-Fallback", "false")), json.dumps(body).encode())
 
 
 class MeshEnvironment(dict):
@@ -155,7 +155,7 @@ class MeshOnlyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["cost_status"], "unknown_failure_may_be_billable")
         self.assertEqual(result["diagnostics"]["failed_checks"], ["output_limit_satisfied"])
         self.assertIn("gateway_attempts_unverified", result["diagnostics"]["warnings"])
-        self.assertIn("gateway_fallback_unverified", result["diagnostics"]["warnings"])
+        self.assertNotIn("gateway_fallback_unverified", result["diagnostics"]["warnings"])
 
     async def test_only_one_default_transport_is_constructed(self):
         transport = Transport(completion())

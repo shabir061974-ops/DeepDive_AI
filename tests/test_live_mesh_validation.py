@@ -14,7 +14,7 @@ from test_agents import URL, assessment, draft, plan
 
 
 PRIVATE = "private-offline-mesh-value"
-CHECK_NAMES = {"response_json_valid", "root_object", "model_matches", "usage_object",
+CHECK_NAMES = {"response_json_valid", "root_object", "model_matches", "routing_metadata_valid", "usage_object",
                "token_fields_valid", "token_total_matches", "output_limit_satisfied"}
 
 
@@ -29,7 +29,7 @@ class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
             guard.start()
             self.addCleanup(guard.stop)
 
-    async def run_second_response(self, mutate, *, requested_model=OPTIONS.model):
+    async def run_second_response(self, mutate, *, requested_model=OPTIONS.model, second_headers=None):
         class Transport(MeshTransport):
             async def send(self, request):
                 response = await super().send(request)
@@ -38,7 +38,8 @@ class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
                 if len(self.calls) == 2:
                     data = mutate(data)
                 body = data if isinstance(data, bytes) else json.dumps(data).encode()
-                return HTTPResponse(200, response.headers, body)
+                headers = second_headers if len(self.calls) == 2 and second_headers is not None else response.headers
+                return HTTPResponse(200, headers, body)
 
         mesh = Transport(plan(), draft, assessment)
         with patch("deepdive_ai.demo.run_demo", side_effect=AssertionError("No fixture fallback")):
@@ -167,18 +168,24 @@ class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(metadata["model_field_type"], "unavailable")
         self.assertIsNone(metadata["public_model_identifier"])
 
-    async def test_display_allowlist_cannot_accept_short_name_for_prefixed_request(self):
+    async def test_support_confirmed_pair_is_accepted_without_using_display_allowlist(self):
         requested = "google/gemini-2.5-flash"
         for returned in (requested, "gemini-2.5-flash"):
             result, _, _ = await self.run_second_response(lambda data: {**data, "model": returned},
                                                          requested_model=requested)
-            if returned == requested:
-                self.assertEqual(result["status"], "completed")
-                self.assertEqual(result["report_status"], "verified")
-                self.assertNotIn("mesh", result["diagnostics"])
-            else:
-                self.assertEqual(result["status"], "failed")
-                metadata = result["diagnostics"]["mesh"]
-                self.assertEqual(metadata["public_model_identifier"], returned)
-                self.assertFalse(metadata["mesh_validation_checks"]["model_matches"])
-                self.assertEqual(result["attempts"]["mesh"], 2)
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["report_status"], "verified")
+            self.assertNotIn("mesh", result["diagnostics"])
+
+    async def test_routing_failures_are_persisted_without_raw_metadata(self):
+        base = (("Content-Type", "application/json"), ("X-Mesh-Version", "2026-08"))
+        for extra in ((("X-Mesh-Routing-Fallback", "true"),),
+                      (("X-Mesh-Routing-Fallback", "false"), ("X-Mesh-Routing-Model", PRIVATE)),
+                      (("X-Mesh-Routing-Fallback", "false"), ("x-mesh-routing-fallback", PRIVATE))):
+            result, audit, folder = await self.run_second_response(lambda data: data, second_headers=base + extra)
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["failure_category"], "response_validation")
+            self.assertFalse(result["diagnostics"]["mesh"]["mesh_validation_checks"]["routing_metadata_valid"])
+            self.assertEqual(result["attempts"], {"mesh": 2, "brave": 1, "source": 1})
+            self.assertEqual(audit[-1], "failed")
+            self.assertFalse((folder / "report.json").exists())

@@ -32,8 +32,8 @@ def search_response() -> HTTPResponse:
 
 
 def mesh_response() -> HTTPResponse:
-    return HTTPResponse(200, HEADERS, json.dumps({
-        "id": "offline-completion", "choices": [{"finish_reason": "stop",
+    return HTTPResponse(200, HEADERS + (("X-Mesh-Routing-Fallback", "false"),), json.dumps({
+        "id": "offline-completion", "model": "offline-model", "choices": [{"finish_reason": "stop",
         "message": {"role": "assistant", "content": "OK"}}],
     }).encode())
 
