@@ -2,6 +2,17 @@
 
 ## Current Phase 10 status
 
+Latest verified checkpoint: `7a028fd`; 320 offline tests passed and
+[Offline CI run 39157978525](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39157978525)
+succeeded. No verification was rerun for this documentation correction.
+
+The latest live attempt, `f1728f2859d04a00943f67187561b970`, made one Mesh
+request and no Brave/source requests. Mesh returned HTTP 200 and model identity
+passed, but routing validation rejected the absent `X-Mesh-Routing-Fallback`
+header with `fallback_missing`. Absence is not evidence that fallback occurred.
+No complete live report was produced. The official Agent Arena checker has not
+yet been activated. Scripted offline evaluations do not measure live accuracy.
+
 **Live Mesh timeout adjustment:** the live runner now gives each Mesh exchange
 25 seconds, up from 15, while preserving the 30-second agent operation and
 120-second overall workflow deadlines. Brave/source deadlines remain 10 seconds;
@@ -23,14 +34,14 @@ is now accepted for non-streaming responses with a valid response version at
 least `2026-08`, explicit fallback `false` and no routing-model header. See the
 [shared identity/routing policy](mesh_model_identity.md). This supersedes the
 identity-equivalence uncertainty in the baseline record below; it does not
-establish a successful live retest or change key provider pinning or spending gates.
+establish a completed live workflow or change key provider pinning or spending gates.
 
 ### Historical baseline identity finding
 
 Baseline `b8b6f90`: the live CLI and private audit/report persistence described
 below exist. Operator evidence includes separate Mesh and Brave HTTP 200 and a
 run that completed Planner/discovery/source retrieval before reaching Drafter.
-The current blocker is exact model identity: requested
+At that historical baseline, the blocker was exact model identity: requested
 `google/gemini-2.5-flash`, returned `gemini-2.5-flash`. No authoritative response
 alias mapping has been established, so acceptance remains exact. Safe diagnostic
 display of either identifier does not authorize either as an alias.

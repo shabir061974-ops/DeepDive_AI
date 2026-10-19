@@ -2,16 +2,26 @@
 
 ## Current status and historical command context
 
-At documentation baseline `b8b6f90`, operator evidence has progressed beyond the
-Planner-format failure recorded below: Brave separately passed HTTP 200 and a
-live run reached Drafter. The current blocker is requested
-`google/gemini-2.5-flash` versus returned `response.model` of
-`gemini-2.5-flash`. Exact acceptance remains required; authoritative equivalence
-is not established. No complete live five-agent report has been validated.
+Latest verified checkpoint: `7a028fd`; 320 offline tests passed and
+[Offline CI run 39157978525](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39157978525)
+succeeded. No tests or CI were rerun for this documentation correction.
+
+Support confirmed the exact Gemini model-identifier pair for API 2026-08 onward;
+strict version/routing checks remain required. The latest live attempt,
+`f1728f2859d04a00943f67187561b970`, returned Mesh HTTP 200 but was rejected
+because `X-Mesh-Routing-Fallback` was absent (`fallback_missing`). Model identity
+passed. One Mesh request and no Brave/source requests were made. Missing
+metadata does not prove fallback occurred. No complete live five-agent report
+has been validated; scripted offline results do not establish live performance.
+The official Agent Arena checker has not yet been activated.
+
+Historical baseline `b8b6f90` recorded a Drafter model-ID mismatch before the
+support-confirmed equivalence was implemented. Separate Brave HTTP 200 and an
+earlier run reaching Drafter remain historical partial-workflow evidence.
 
 The following preparation record and staged commands are preserved as history.
 Do not repeat earlier probes just because they appear below or treat their old
-execution order as a new instruction. Resolve the model-ID contract first,
+execution order as a new instruction. Resolve the missing routing metadata first,
 review current [live limits and persistence](live_research.md) and obtain separate
 authorization before any future paid/live request. See
 [current evidence and outstanding submission items](submission_readiness.md).

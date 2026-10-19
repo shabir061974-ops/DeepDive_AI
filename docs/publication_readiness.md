@@ -2,11 +2,15 @@
 
 > **Historical Phase 8 audit.** Checkpoints, test counts, absent CLI/persistence
 > capabilities and provider-readiness statements below describe that phase.
-> The current baseline is `b8b6f90`; see the [current status](../README.md#current-status)
+> The latest verified checkpoint is `7a028fd` (320 offline tests passed); see
+> the [current status](../README.md#current-status)
 > and [submission readiness](submission_readiness.md). The live CLI and private
 > audit/report persistence now exist, Brave has operator-reported HTTP 200,
-> and complete live research remains blocked by exact Mesh model-ID mismatch.
-> This historical record is not authorization to activate the official checker.
+> and the exact Gemini model-ID equivalence is now supported under strict checks.
+> The latest live attempt returned HTTP 200 but was rejected because
+> `X-Mesh-Routing-Fallback` was absent (`fallback_missing`); absence does not prove
+> fallback occurred. Complete live research remains unverified. The official
+> checker has not yet been activated. This historical record does not authorize it.
 
 Started from verified clean HEAD `4f415ac` on `master`, Python 3.12.10.
 Developed by Chabir Ahamad Abusali. No repository creation, commit, push,

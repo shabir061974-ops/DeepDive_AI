@@ -8,27 +8,31 @@ Developed by Chabir Ahamad Abusali
 
 ## Current status
 
-Published baseline: `4079cdf` on `master`; the model policy below describes the
-current offline compatibility change. This table supersedes the historical
-phase records below; it does not describe a completed live research run.
+Latest verified checkpoint: `7a028fd682c5c11388d7c10ca1ae471b542aa265` on
+`master`. This table supersedes the historical phase records below; it does not
+describe a completed live research run. No tests or CI were rerun for this
+documentation-only correction.
 
 | Area | Evidence at this checkpoint | Status |
 | --- | --- | --- |
 | Offline workflow | Real coordinator and five agents with scripted Mesh responses and local retrieval fixtures | Verified offline only |
 | Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only |
-| Automated verification | Published baseline recorded 302 passing Python tests and six passing browser scenarios | Baseline evidence; later changes need their own verification |
-| GitHub Offline CI | [Successful run 39022921269](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39022921269) for `4079cdf` | Previously verified; later commits need their own CI evidence |
+| Automated verification | 320 offline Python tests passed at the latest verified checkpoint; six browser scenarios passed | Recorded verification evidence, not a new test run |
+| GitHub Offline CI | [Successful run 39157978525](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39157978525) for `7a028fd` | Previously verified; this documentation edit has not run CI |
 | Live connectivity | Operator-reported Mesh HTTP 200 and separate Brave HTTP 200 | Connectivity evidence, not complete research validation |
 | Live partial workflow | Operator-reported run completed Planner, discovery and source retrieval, then reached Drafter | Does not verify later agent contracts |
-| Mesh model identity | Support confirmed the exact Gemini identifier pair for API 2026-08 onward | Non-streaming compatibility implemented offline with strict version/routing checks; no live retest claimed |
+| Mesh model identity | Support confirmed the exact Gemini identifier pair for API 2026-08 onward; latest live response passed model identity validation | Strict routing validation remains required |
+| Latest live attempt | Run `f1728f2859d04a00943f67187561b970`: Mesh HTTP 200, one Mesh request, zero Brave/source requests; rejected with `fallback_missing` | `X-Mesh-Routing-Fallback` was absent; this does not prove fallback occurred |
 | Complete live research | No verified completed live five-agent report, live Verifier assessment or independently checked final live citations | Unverified |
-| Official checker and submission | Inactive template retained; video/submission requirements need operator confirmation | Outstanding; Offline CI does not establish organizer acceptance |
+| Official checker and submission | Official Agent Arena checker has not yet been activated; inactive template retained | Outstanding; Offline CI does not establish organizer acceptance |
 
 The identifier discrepancy does not establish that Mesh used a different
 underlying model or fallback. Display allowlisting remains diagnostic only.
 The [support-confirmed acceptance policy](docs/mesh_model_identity.md) allows only
 the exact pair on a confirmed supported response version, requires explicit
-no-fallback metadata, and rejects any routing-model header. Earlier Planner JSON-format failures and Brave timeouts are
+no-fallback metadata, and rejects any routing-model header. The latest live
+blocker is missing fallback metadata, not the historical model-ID mismatch.
+Earlier Planner JSON-format failures and Brave timeouts are
 historical evidence, not the current blocking stage. See the [submission checklist
 and video script](docs/submission_readiness.md) and [live runner](docs/live_research.md).
 

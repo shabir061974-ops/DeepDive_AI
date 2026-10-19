@@ -75,5 +75,10 @@ were changed. Offline fixtures now explicitly model an accepted no-fallback
 response. The six authored evaluation cases remain separate from live research.
 
 The previously observed Drafter mismatch is now an offline-tested supported
-normalization case, not proof of a successful live fix. A separately authorized
-live run is still needed to validate actual headers and all five-agent stages.
+normalization case. At the latest verified checkpoint `7a028fd` (320 offline
+tests passed), the latest live attempt `f1728f2859d04a00943f67187561b970`
+returned HTTP 200 and passed model identity validation, but failed with
+`fallback_missing`: `X-Mesh-Routing-Fallback` was absent. This does not prove
+fallback occurred or establish a completed live workflow. Resolve the missing
+metadata without weakening safeguards before a separately authorized live test.
+The official Agent Arena checker has not yet been activated.

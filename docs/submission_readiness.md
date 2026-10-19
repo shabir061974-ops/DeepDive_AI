@@ -4,11 +4,14 @@ Developed by Chabir Ahamad Abusali.
 
 ## Current submission evidence
 
-Current documentation baseline is `b8b6f90` on `master`. The previously verified
-[Offline CI run 38954357490](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/38954357490)
-passed for that exact checkpoint. The recorded baseline is 295 offline Python
-tests and six browser scenarios passing; this documentation edit does not claim
-a fresh test run, a new CI run or a completed live research run.
+Latest verified checkpoint is `7a028fd682c5c11388d7c10ca1ae471b542aa265` on
+`master`. The previously verified
+[Offline CI run 39157978525](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39157978525)
+passed for that checkpoint. **320 offline Python tests passed**, along with six
+browser scenarios. This documentation correction does not claim a fresh test
+run, a new CI run or a completed live research run. The six separate scripted
+self-evaluation cases measure deterministic offline correctness, not genuine
+live research performance; their recorded results remain unchanged.
 
 Use the [fresh-checkout quickstart](../README.md#fresh-checkout-quickstart),
 [six-scenario table](../README.md#six-offline-scenarios),
@@ -70,8 +73,9 @@ requirements remain documented in [live research](live_research.md).
 | Mesh connectivity | Operator-reported HTTP 200/text connectivity; not proof of all agent contracts |
 | Planner, discovery and source retrieval | Operator-reported live run progressed through these stages to Drafter |
 | Brave connectivity | Separately passed HTTP 200 according to operator evidence; earlier timeouts are historical |
-| Drafter response validation | HTTP 200 rejected: requested `google/gemini-2.5-flash`, returned `gemini-2.5-flash`; exact model equality remains required |
-| Drafter/Verifier live JSON contracts and final live report | Not established; Drafter's metadata rejection occurs before its agent JSON can be accepted |
+| Historical Drafter model-ID rejection | The exact Gemini identifier pair is now supported for API 2026-08 onward under strict version/routing checks; it is no longer the current blocker |
+| Latest live attempt | Run `f1728f2859d04a00943f67187561b970`: HTTP 200, one Mesh request, zero Brave/source requests; model identity passed, but `X-Mesh-Routing-Fallback` was absent (`fallback_missing`) |
+| Drafter/Verifier live JSON contracts and final live report | Not established end to end; the latest run stopped at Planner response metadata validation, with no final report |
 | Full live research and independent semantic accuracy | Not demonstrated; no metrics claimed |
 | Official hackathon checker | Exact inactive template retained; not activated |
 
@@ -79,9 +83,10 @@ Do not use fixture results as live research. A green offline test does not remov
 live-provider blockers. Live preflight can validate configuration but cannot
 authenticate a key, check account billing or establish model-ID equivalence. Use only
 the [reviewed future live commands and spending gates](live_research.md#future-powershell-commands-do-not-execute-during-preparation)
-after the identity contract is resolved and separate live/spend authorization.
-Do not treat routing labels or the diagnostic display allowlist as authoritative
-alias confirmation. Do not repeat successful connectivity probes automatically.
+after the missing routing metadata is resolved without weakening safeguards and
+separate live/spend authorization is obtained. Header absence does not prove
+fallback occurred. The support-confirmed Gemini equivalence does not authorize
+arbitrary aliases; see the [identity/routing policy](mesh_model_identity.md). Do not repeat successful connectivity probes automatically.
 A planner call may incur cost before a later stage fails; client bounds are not
 a hard dollar ceiling on gateway work.
 
@@ -109,7 +114,7 @@ a hard dollar ceiling on gateway work.
 - Export Markdown and confirm it retains the offline notice and citations.
 - Show a passing automated test/CI result for the exact recorded commit, while
   explaining that provider responses in integration tests are mocked.
-- State the model-ID blocker and unverified live stages clearly. Do not execute
+- State the missing routing-header blocker and unverified live stages clearly. Do not execute
   the live runner during recording without separate approval. If you started a
   disposable recording server, stop only that instance afterward; leave an
   existing dashboard untouched.
@@ -143,16 +148,18 @@ web findings."
 **Engineering/close:** "The live runner uses Mesh for every LLM request and Brave
 for discovery, with public-source retrieval, strict JSON contracts, request
 budgets and private persistent audit/report files. The operator has separately
-observed Mesh and Brave HTTP 200, and a live run reached Drafter. It stopped
-because the returned model identifier did not exactly match the requested one.
-We have not accepted an undocumented alias or completed a verified live report.
+observed Mesh and Brave HTTP 200, and an earlier live run reached Drafter.
+Support confirmed the Gemini model-identifier equivalence. The latest attempt
+returned HTTP 200 but was rejected because X-Mesh-Routing-Fallback was absent.
+That does not prove fallback occurred. We have not completed a verified live
+report, and the official Agent Arena checker has not yet been activated.
 Offline integration tests and GitHub CI cover the orchestration with mocked
 providers; they do not establish live research accuracy."
 
 ## Completed evidence and outstanding submission items
 
 - [x] Existing public repository identified; no new repository is needed.
-- [x] Baseline `b8b6f90` has the successful Offline CI evidence linked above.
+- [x] Checkpoint `7a028fd` has the successful Offline CI evidence linked above.
 - [x] Recorded offline workflow and six browser scenarios cover the demo behavior.
 - [x] Developer attribution and explicit offline labeling are present.
 
@@ -168,8 +175,8 @@ The following remain open; completed baseline checks do not complete these items
 - [ ] Confirm the operator-supplied deadline: October 20, 2026 at 8:30 PM Kuwait
   time. This document records the supplied deadline, not a newly verified rule.
 - [ ] If actual live research is required for acceptance, separately authorize
-  one bounded run after authoritative model-ID compatibility, remaining agent
-  JSON contracts and spend exposure are reviewed. Never claim a run not performed.
+  one bounded run after the missing routing metadata, remaining agent JSON
+  contracts and spend exposure are reviewed. Never claim a run not performed.
 - [ ] Review official checker activation separately. The supplied
   [official workflow URL](https://careerapi-production.krishnaik.in/api/ci/hackathons/agent-arena-2026/workflow.yml)
   was retrieved in Phase 8; the exact local template hash is
