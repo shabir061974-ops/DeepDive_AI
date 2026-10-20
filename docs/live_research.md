@@ -122,7 +122,9 @@ retry, destination, TLS or network policy was changed to work around it.
 The following paragraph records the Phase 9 JSON behavior; later Planner-only
 support for one complete standalone JSON fence is documented in
 [Planner compatibility](planner_compatibility.md). Drafter/Verifier strict JSON
-rules were not relaxed by that change.
+rules were not relaxed by that change. On October 20, 2026, after a live Drafter
+`malformed_agent_json` failure, Drafter and Verifier opted into the same
+whole-document fence; their schemas, evidence and quote checks are unchanged.
 
 Mesh's operator-reported HTTP 200/text-schema success does not establish agent
 JSON compatibility. The prior exact-OK issue was confined to connectivity and

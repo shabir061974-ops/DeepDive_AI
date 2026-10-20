@@ -32,10 +32,24 @@ class AgentFailureCode(StrEnum):
     DUPLICATE_TASKS = "duplicate_planner_tasks"
 
 
+class AgentJSONShape(StrEnum):
+    """Fixed diagnostic for malformed agent JSON. Describes form only, never content."""
+
+    FENCED_VALID_JSON = "fenced_valid_json"
+    FENCED_INVALID_JSON = "fenced_invalid_json"
+    EMBEDDED_FENCE = "embedded_fence"
+    NON_JSON_PREFIX = "non_json_prefix"
+    TRAILING_CONTENT = "trailing_content"
+    INCOMPLETE_JSON = "incomplete_json"
+    INVALID_SYNTAX = "invalid_syntax"
+
+
 class AgentOutputError(AgentError):
-    def __init__(self, message: str, *, code: AgentFailureCode = AgentFailureCode.INVALID_OUTPUT):
+    def __init__(self, message: str, *, code: AgentFailureCode = AgentFailureCode.INVALID_OUTPUT,
+                 json_shape: AgentJSONShape | None = None):
         super().__init__(message)
         self.code = code if isinstance(code, AgentFailureCode) else AgentFailureCode.INVALID_OUTPUT
+        self.json_shape = json_shape if isinstance(json_shape, AgentJSONShape) else None
 
 
 class AgentLimitError(AgentError):
@@ -133,6 +147,35 @@ def _invalid_constant(value: str) -> None:
     raise AgentOutputError("Agent JSON contains a non-finite value", code=AgentFailureCode.NONFINITE)
 
 
+_FENCE = re.compile(r"```(?:json)?\r?\n(.*?)\r?\n```", flags=re.DOTALL)
+
+
+def _json_shape(document: str) -> AgentJSONShape:
+    """Classify an already-rejected document for diagnostics only; never used for acceptance."""
+    stripped = document.strip(" \t\r\n")
+    fenced = _FENCE.fullmatch(stripped)
+    if fenced is not None:
+        try:
+            json.loads(fenced.group(1))
+        except (ValueError, RecursionError):
+            return AgentJSONShape.FENCED_INVALID_JSON
+        return AgentJSONShape.FENCED_VALID_JSON
+    if "```" in stripped:
+        return AgentJSONShape.EMBEDDED_FENCE
+    if not stripped.startswith(("{", "[")):
+        return AgentJSONShape.NON_JSON_PREFIX
+    try:
+        _, end = json.JSONDecoder().raw_decode(stripped)
+    except json.JSONDecodeError as error:
+        # An unterminated string always runs to the end of the input.
+        if error.pos >= len(stripped) or error.msg.startswith("Unterminated string"):
+            return AgentJSONShape.INCOMPLETE_JSON
+        return AgentJSONShape.INVALID_SYNTAX
+    except RecursionError:
+        return AgentJSONShape.INVALID_SYNTAX
+    return AgentJSONShape.TRAILING_CONTENT if end < len(stripped) else AgentJSONShape.INVALID_SYNTAX
+
+
 class MeshJSON:
     def __init__(self, mesh: MeshClient, model: str, limits: AgentLimits,
                  budget: AgentBudget | None = None):
@@ -170,15 +213,15 @@ class MeshJSON:
             raise AgentError("Mesh completion failed") from None
         if not isinstance(response, MeshResponse):
             raise AgentOutputError("Mesh returned an invalid response record", code=AgentFailureCode.INVALID_RESPONSE)
-        raw = text(response.text, self.limits.max_response_chars)
+        original = raw = text(response.text, self.limits.max_response_chars)
         if allow_markdown_fence:
             # One whole-document wrapper only: never search prose for JSON,
             # complete partial output, or change any field inside the document.
-            fenced = re.fullmatch(r"```(?:json)?\r?\n(.*?)\r?\n```",
-                                  raw.strip(" \t\r\n"), flags=re.DOTALL)
+            fenced = _FENCE.fullmatch(raw.strip(" \t\r\n"))
             if fenced is not None:
                 raw = fenced.group(1)
         try:
             return json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
         except (ValueError, RecursionError):
-            raise AgentOutputError("Mesh returned malformed agent JSON", code=AgentFailureCode.MALFORMED_JSON) from None
+            raise AgentOutputError("Mesh returned malformed agent JSON", code=AgentFailureCode.MALFORMED_JSON,
+                                   json_shape=_json_shape(original)) from None

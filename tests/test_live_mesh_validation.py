@@ -107,12 +107,13 @@ class LiveMeshValidationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_metadata_does_not_bypass_drafter_json_validation(self):
         def fenced(data):
-            data["choices"][0]["message"]["content"] = '```json\n{"claims":[]}\n```'
+            data["choices"][0]["message"]["content"] = 'Here is the JSON:\n```json\n{"claims":[]}\n```'
             return data
 
         result, audit, folder = await self.run_second_response(fenced)
         self.assertEqual(result["failure_category"], "agent_contract_failure")
         self.assertEqual(result["agent_failure_code"], "malformed_agent_json")
+        self.assertEqual(result["agent_json_shape"], "embedded_fence")
         self.assertNotIn("mesh", result["diagnostics"])
         self.assertEqual(audit[-1], "failed")
         self.assertFalse((folder / "report.json").exists())

@@ -53,7 +53,8 @@ class MeshVerifierAgent:
                  "assessments": [{"evidence_id": "supplied id", "relation": "supports|contradicts|irrelevant|insufficient",
                                   "quote": "exact substring or empty", "rationale": "semantic explanation"}]},
                 {"claim": {"id": claim.id, "text": claim.text, "evidence_ids": claim.evidence_ids},
-                 "evidence": evidence_payload(bundle)}), {"claim_id", "verdict", "rationale", "assessments"})
+                 "evidence": evidence_payload(bundle)},
+                allow_markdown_fence=True), {"claim_id", "verdict", "rationale", "assessments"})
             if (result["claim_id"] != claim.id or not isinstance(result["verdict"], str)
                     or result["verdict"] not in {status.value for status in VerificationStatus}):
                 raise AgentOutputError("Verifier returned an invalid claim or verdict")

@@ -38,7 +38,8 @@ class MeshDrafterAgent:
             "Do not embed URLs or citation markup in claim text. Preserve qualifiers, dates, "
             "scope and uncertainty; never hide conflicting evidence. Return an empty list if no claim is justified.",
             {"claims": [{"text": "one factual claim", "evidence_ids": ["supplied id"]}]},
-            {"question": question.text, "evidence": evidence_payload(bundle)}), {"claims"})
+            {"question": question.text, "evidence": evidence_payload(bundle)},
+            allow_markdown_fence=True), {"claims"})
         rows = bounded_list(result["claims"], limits.max_claims)
         known = {item.id for item in bundle.evidence}
         claims = []
