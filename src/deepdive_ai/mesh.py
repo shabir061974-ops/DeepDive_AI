@@ -13,7 +13,7 @@ from .http_transport import (
 
 from .models import nonempty
 from .configuration import provider_key
-from .audit import RoutingRejectionCode
+from .audit import MeshResponseClassification, RoutingRejectionCode
 
 
 @dataclass(frozen=True)
@@ -92,6 +92,54 @@ class MeshIdentityError(MeshError):
     default_category = FailureCategory.VALIDATION
 
 
+@dataclass(frozen=True)
+class MeshResponseClassificationResult:
+    classification: MeshResponseClassification
+    rejection_codes: tuple[RoutingRejectionCode, ...] = ()
+
+
+def classify_mesh_response(response: HTTPResponse) -> MeshResponseClassificationResult:
+    """Classify headers without retaining values or establishing routing trust.
+
+    Support clarification supplied October 20, 2026: explicit cache hits may
+    omit routing headers. They remain unverified, never accepted as no-fallback.
+    This non-streaming client does not accept server-sent event responses.
+    """
+    def values(name: str) -> list:
+        return [value for key, value in response.headers
+                if isinstance(key, str) and key.lower() == name]
+
+    cache = values("x-cache")
+    content_types = values("content-type")
+    codes = []
+    if cache and (len(cache) != 1 or type(cache[0]) is not str or cache[0] not in ("HIT", "MISS")):
+        codes.append(RoutingRejectionCode.INVALID_CACHE_METADATA)
+    if len(content_types) > 1 or any(not (type(value) is str and value.isascii()
+            and 0 < len(value) <= 120 and all(32 <= ord(char) <= 126 for char in value))
+            for value in content_types):
+        codes.append(RoutingRejectionCode.INVALID_METADATA_VALUE)
+    streaming = any(type(value) is str and value.split(";", 1)[0].strip().lower() == "text/event-stream"
+                    for value in content_types)
+    hit = len(cache) == 1 and type(cache[0]) is str and cache[0] == "HIT"
+    routing_present = any(values(name) for name in (
+        "x-mesh-routing-model", "x-mesh-routing-fallback", "x-mesh-routing-attempts"))
+    if hit:
+        codes.append(RoutingRejectionCode.CACHED_RESPONSE_UNVERIFIED)
+        if routing_present or streaming:
+            codes.append(RoutingRejectionCode.CONTRADICTORY_METADATA)
+    if streaming:
+        codes.append(RoutingRejectionCode.UNEXPECTED_STREAMING)
+    invalid = any(code in codes for code in (
+        RoutingRejectionCode.INVALID_CACHE_METADATA, RoutingRejectionCode.INVALID_METADATA_VALUE,
+        RoutingRejectionCode.CONTRADICTORY_METADATA))
+    classification = (MeshResponseClassification.INVALID if invalid else
+                      MeshResponseClassification.STREAMING if streaming else
+                      MeshResponseClassification.CACHED if hit else
+                      MeshResponseClassification.NORMAL if values("x-mesh-routing-fallback") else
+                      MeshResponseClassification.UNKNOWN)
+    return MeshResponseClassificationResult(classification, tuple(codes))
+
+
 def mesh_identity_checks(response: HTTPResponse, requested: str, returned: object) -> dict[str, bool]:
     """Support-confirmed non-streaming policy; never return raw header values.
 
@@ -120,7 +168,8 @@ def mesh_identity_checks(response: HTTPResponse, requested: str, returned: objec
     if values["x-mesh-routing-attempts"] and (attempts is None or not attempts.isascii()
             or not attempts.isdecimal() or len(attempts) > 6 or int(attempts) < 1):
         valid = False
-    valid = valid and not values["x-mesh-routing-model"] and one("x-mesh-routing-fallback") == "false"
+    valid = (valid and not values["x-mesh-routing-model"] and one("x-mesh-routing-fallback") == "false"
+             and not classify_mesh_response(response).rejection_codes)
     exact = type(returned) is str and returned == requested
     pair = frozenset({"google/gemini-2.5-flash", "gemini-2.5-flash"})
     normalized = (type(returned) is str and requested in pair and returned in pair
@@ -140,7 +189,7 @@ def mesh_routing_rejection_codes(response: HTTPResponse) -> tuple[RoutingRejecti
         items = values[name]
         return items[0] if len(items) == 1 and type(items[0]) is str else None
 
-    found = set()
+    found = set(classify_mesh_response(response).rejection_codes)
     if any(len(items) > 1 for items in values.values()):
         found.add(RoutingRejectionCode.DUPLICATE_METADATA)
     if any(not (type(v) is str and v.isascii() and len(v) <= 120
@@ -220,6 +269,9 @@ class MeshAPIClient:
              ("Accept-Encoding", "identity")), payload)
         if response.status != 200:
             raise MeshError(f"Mesh request failed with HTTP status {response.status}")
+        if classify_mesh_response(response).rejection_codes:
+            raise MeshError("Mesh response classification rejected", category=FailureCategory.VALIDATION,
+                            http_status=200)
         media_type = (response.header("content-type") or "").split(";", 1)[0].strip().lower()
         if media_type != "application/json":
             raise MeshError("Mesh returned an unsupported response type")

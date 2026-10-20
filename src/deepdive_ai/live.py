@@ -17,7 +17,8 @@ from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
     PublicHTTPTransport, RequestPolicy, status_category, validate_url,
 )
-from .mesh import MeshAPIClient, MeshSettings, mesh_identity_checks, mesh_routing_rejection_codes
+from .mesh import (MeshAPIClient, MeshSettings, classify_mesh_response,
+                   mesh_identity_checks, mesh_routing_rejection_codes)
 from .models import ResearchQuestion, nonempty
 from .persistence import JsonlAuditSink, write_record
 from .retrieval import HTTPWebRetriever, RetrievalSettings
@@ -93,6 +94,7 @@ class ObservedTransport:
         validation_checks = None
         model_diagnostics = None
         routing_codes = ()
+        classification = None
         hostname = None
         if self.source_diagnostics:
             try:
@@ -111,6 +113,8 @@ class ObservedTransport:
                 self._record_failure({"category": status_category(response.status).value,
                                       "stage": None, "http_status": response.status}, hostname)
             if self.model is not None and response.status == 200:
+                classification = classify_mesh_response(response).classification
+                routing_codes = mesh_routing_rejection_codes(response)
                 # The Mesh client independently validates strict JSON/completion shape.
                 # This runner additionally requires the selected model and bounded usage.
                 validation_checks = dict.fromkeys(("response_json_valid", "root_object", "model_matches", "routing_metadata_valid",
@@ -125,8 +129,6 @@ class ObservedTransport:
                         raise ValueError
                     model_diagnostics = _model_identity_diagnostics(data)
                     validation_checks.update(mesh_identity_checks(response, self.model, data.get("model")))
-                    if not validation_checks["routing_metadata_valid"]:
-                        routing_codes = mesh_routing_rejection_codes(response)
                     usage = data.get("usage")
                     validation_checks["usage_object"] = isinstance(usage, dict)
                     if not isinstance(usage, dict):
@@ -149,6 +151,7 @@ class ObservedTransport:
                                   "stage": error.stage.value if error.stage else None,
                                   "http_status": error.http_status}, hostname)
             if error.category == FailureCategory.VALIDATION and validation_checks is not None:
+                self.failure["mesh_response_classification"] = classification
                 self.failure["mesh_validation_checks"] = validation_checks
                 self.failure.update(model_diagnostics)
                 if routing_codes:
@@ -174,8 +177,10 @@ class _RoutingAuditSink:
         mesh = self.observers.get("mesh")
         if event.kind == AuditKind.FAILED and mesh is not None and mesh.failure:
             codes = tuple(mesh.failure.get("routing_rejection_codes", ()))
-            if codes:
-                event = replace(event, routing_rejection_codes=codes)
+            classification = mesh.failure.get("mesh_response_classification")
+            if codes or classification is not None:
+                event = replace(event, routing_rejection_codes=codes,
+                                mesh_response_classification=classification)
         self.sink.emit(event)
 
 

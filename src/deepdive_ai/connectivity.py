@@ -12,7 +12,8 @@ from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
     PublicHTTPTransport, RequestPolicy, status_category,
 )
-from .mesh import MeshAPIClient, MeshIdentityError, MeshRequest, MeshSettings, mesh_identity_checks
+from .mesh import (MeshAPIClient, MeshIdentityError, MeshRequest, MeshSettings,
+                   classify_mesh_response, mesh_identity_checks, mesh_routing_rejection_codes)
 from .retrieval import SearchRequest
 from .search import BraveSearchDiscovery, BraveSearchSettings
 
@@ -79,6 +80,14 @@ class _Observation:
     def status(self) -> int | None:
         return self._response.status if self._response is not None else self._failure_status
 
+    def mesh_classification(self) -> dict:
+        response = self._response
+        if response is None:
+            return {}
+        classified = classify_mesh_response(response)
+        return {"mesh_response_classification": classified.classification,
+                "routing_rejection_codes": list(mesh_routing_rejection_codes(response))}
+
     def mesh_metadata(self, version: str | None) -> tuple[bool, dict[str, int] | None, dict]:
         response = self._response
         if response is None:
@@ -111,6 +120,7 @@ class _Observation:
         if version is None:
             warnings.append("mesh_version_not_checked")
         diagnostics = {"gateway_attempts_reported": attempts, "gateway_fallback_reported": fallback,
+                       **self.mesh_classification(),
                        "version_matches": version_matches, "warnings": warnings,
                        "reply_matches": data["choices"][0]["message"]["content"].strip() == "OK",
                        "validation_checks": {"response_schema_compatible": True,
@@ -212,6 +222,8 @@ async def run_connectivity(
                     active["estimated_cost_usd"] = format(cost, "f")
     except Exception as error:
         # Never format exceptions: even injected transports may contain secrets.
+        if observer is mesh:
+            active["diagnostics"].update(mesh.mesh_classification())
         if isinstance(error, MeshIdentityError) and observer is mesh:
             _, usage, diagnostics = mesh.mesh_metadata(options.mesh_version)
             checks = diagnostics["validation_checks"]

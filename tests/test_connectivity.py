@@ -133,6 +133,7 @@ class ConnectivityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report["mesh"]["status"], "passed")
         self.assertEqual(report["mesh"]["diagnostics"], {
             "gateway_attempts_reported": None, "gateway_fallback_reported": False, "version_matches": None,
+            "mesh_response_classification": "normal_non_streaming", "routing_rejection_codes": [],
             "warnings": ["gateway_attempts_unverified", "mesh_version_not_checked"],
             "validation_checks": {"response_schema_compatible": True, "model_matches": True, "routing_metadata_valid": True,
                                   "expected_version_matches": None,

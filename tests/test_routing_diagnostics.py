@@ -28,6 +28,11 @@ CASES = (
     ((("X-Mesh-Version", "2026-13"), ("X-Mesh-Routing-Fallback", "false")), ("invalid_version",)),
     (SAFE + (("X-Mesh-Routing-Attempts", "0"),), ("invalid_attempts",)),
     (SAFE + (("X-Mesh-Routing-Model", PRIVATE + "\t"),), ("routing_model_present", "invalid_metadata_value")),
+    (BASE + (("X-Cache", "HIT"),), ("fallback_missing", "cached_response_unverified")),
+    ((("Content-Type", "text/event-stream"), ("X-Mesh-Routing-Fallback", "false")),
+     ("unexpected_streaming",)),
+    (SAFE + (("X-Cache", PRIVATE),), ("invalid_cache_metadata",)),
+    (SAFE + (("X-Cache", "HIT"),), ("cached_response_unverified", "contradictory_metadata")),
 )
 
 

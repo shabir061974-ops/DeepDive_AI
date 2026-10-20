@@ -28,6 +28,18 @@ class RoutingRejectionCode(StrEnum):
     INVALID_VERSION = "invalid_version"
     INVALID_ATTEMPTS = "invalid_attempts"
     INVALID_METADATA_VALUE = "invalid_metadata_value"
+    CACHED_RESPONSE_UNVERIFIED = "cached_response_unverified"
+    UNEXPECTED_STREAMING = "unexpected_streaming"
+    INVALID_CACHE_METADATA = "invalid_cache_metadata"
+    CONTRADICTORY_METADATA = "contradictory_metadata"
+
+
+class MeshResponseClassification(StrEnum):
+    NORMAL = "normal_non_streaming"
+    CACHED = "cached_response"
+    STREAMING = "unexpected_streaming"
+    UNKNOWN = "unknown_response"
+    INVALID = "invalid_metadata"
 
 
 @dataclass(frozen=True)
@@ -38,6 +50,7 @@ class AuditEvent:
     attempt: int
     occurred_at: datetime
     routing_rejection_codes: tuple[RoutingRejectionCode, ...] = ()
+    mesh_response_classification: MeshResponseClassification | None = None
 
     def __post_init__(self) -> None:
         nonempty(self.run_id, "run id")
@@ -53,6 +66,10 @@ class AuditEvent:
                 or len(set(codes)) != len(codes)
                 or (codes and self.kind != AuditKind.FAILED)):
             raise ValueError("Invalid routing audit codes")
+        if self.mesh_response_classification is not None and (
+                not isinstance(self.mesh_response_classification, MeshResponseClassification)
+                or self.kind != AuditKind.FAILED):
+            raise ValueError("Invalid Mesh response classification")
 
 
 class AuditSink(Protocol):

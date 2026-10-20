@@ -12,6 +12,39 @@ model answered, and `X-Mesh-Routing-Fallback: true` means backup-provider routin
 Streaming lacks those headers and needs dashboard-log verification. This client
 continues to send `stream: false`; streaming is not implemented or enabled.
 
+## October 20 response classification
+
+The operator supplied further Mesh support confirmation: normal non-streaming
+responses carry a true/false fallback header, while cached responses may carry
+`X-Cache: HIT` without routing headers because no model was called for that
+request. The latest historical failure did not retain cache metadata; it cannot
+be retrospectively classified as a cache hit.
+
+The client, live observer and connectivity harness share a fixed classification:
+`normal_non_streaming`, `cached_response`, `unexpected_streaming`,
+`unknown_response` or `invalid_metadata`. Only one exact `X-Cache: HIT` identifies
+an explicit cache hit; `MISS` does not excuse absent routing metadata. Duplicate,
+unknown or malformed cache values reject. A cache hit combined with routing
+headers or an event stream is treated as contradictory and rejected.
+Classification describes the response form, not successful validation; a
+`normal_non_streaming` response can still fail any existing routing/model check.
+
+**Cache classification does not establish no-fallback routing.** All explicit
+cache hits remain rejected with `cached_response_unverified`, including those
+with otherwise valid model metadata. Unexpected `text/event-stream` responses
+reject with `unexpected_streaming`; the client never requests streaming.
+`invalid_cache_metadata` and `contradictory_metadata` provide fixed additional
+rejection codes. No raw cache/header values or response bodies are persisted.
+Failure outcomes and audit events retain only fixed classifications and codes;
+unrelated audit events have no Mesh classification.
+
+Normal responses retain all existing model/version, routing, completion and
+usage checks at their respective client/runner boundaries. No request budgets,
+timeouts, retries, configured model or verification rules change. Authenticated
+usage-request lookup remains unimplemented pending confirmation of its schema,
+request-ID binding and cache/routing semantics. No lookup or live request is
+performed by this change.
+
 ## Acceptance policy
 
 The Mesh client, live runner and isolated connectivity harness share one policy:
@@ -55,10 +88,11 @@ list in `outcome.json` and the existing `failed` event in `audit.jsonl`:
 For example, duplicate fallback fields also prevent reading a single valid
 fallback value, so both `duplicate_metadata` and `fallback_invalid` can appear.
 
-These are diagnostic classifications, not a new acceptance policy. The existing
-model/routing validator remains unchanged; a separate helper describes its
-rejections without retaining header values. Audit codes are typed, unique,
-bounded to the eight fixed values and permitted only on failure events. Other
+The original routing rejection codes remain diagnostic; the original model and
+routing requirements remain in force. The shared classifier additionally rejects
+unverified cache hits, streaming and invalid/contradictory cache metadata.
+Rejection diagnostics retain no header values. Audit codes are typed, unique,
+bounded to the fixed enum values and permitted only on failure events. Other
 events have an empty code list. No extra audit event or network request is added.
 Offline tests cover every category, accepted metadata, overlapping malformed
 metadata, persistence and secret redaction. Earlier failed runs contain no such
