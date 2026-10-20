@@ -47,7 +47,9 @@ class MeshVerifierAgent:
                 "For other relations quote may be empty. Never infer facts beyond supplied excerpts. "
                 "Verdict supported requires cited entailment and no contradictions; contradictory sources require "
                 "insufficient_evidence, unless no cited support exists and the claim is explicitly contradicted, "
-                "in which case use unsupported. Assess each evidence ID exactly once.",
+                "in which case use unsupported. Assess each evidence ID exactly once. "
+                f"The overall rationale, every assessment rationale and every quote must each be at most "
+                f"{limits.max_text_chars} characters; choose a shorter exact quote rather than exceed this limit.",
                 {"claim_id": "supplied claim id", "verdict": "supported|unsupported|insufficient_evidence",
                  "rationale": "semantic explanation",
                  "assessments": [{"evidence_id": "supplied id", "relation": "supports|contradicts|irrelevant|insufficient",

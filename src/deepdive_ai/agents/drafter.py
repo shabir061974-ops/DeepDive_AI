@@ -36,7 +36,9 @@ class MeshDrafterAgent:
             "drafter", f"Draft at most {limits.max_claims} atomic factual claims relevant to the question. "
             "Use only supplied excerpts. Each claim must cite existing evidence IDs. "
             "Do not embed URLs or citation markup in claim text. Preserve qualifiers, dates, "
-            "scope and uncertainty; never hide conflicting evidence. Return an empty list if no claim is justified.",
+            "scope and uncertainty; never hide conflicting evidence. Return an empty list if no claim is justified. "
+            f"Each claim text must be at most {limits.max_text_chars} characters; write a shorter claim rather "
+            "than exceed this limit.",
             {"claims": [{"text": "one factual claim", "evidence_ids": ["supplied id"]}]},
             {"question": question.text, "evidence": evidence_payload(bundle)},
             allow_markdown_fence=True), {"claims"})
