@@ -769,6 +769,17 @@ not provide transport authenticity; prefer HTTPS research sources. DNS/transport
 GET failures can be retried because GET is read only. One validated address is
 tried per attempt; there is no automatic fallback to other DNS addresses.
 
+DNS uses the operating system by default. `DEEPDIVE_DNS_RESOLVER=doh` instead
+resolves IPv4 (A) records over DNS-over-HTTPS JSON at fixed IP endpoints
+`https://1.1.1.1/dns-query`, then once `https://8.8.8.8/resolve` on failure, with
+certifi verification against the endpoint IP, no proxy, a 2.5-second deadline and
+65,536-byte cap per attempt. Status, truncation, question name, answer count and
+every address are validated strictly; the returned addresses still pass the same
+public-IP check and pinning above. Any other value is rejected; unset it or use
+`system` to roll back. This is for hosts whose OS resolver waits on an
+unresponsive DNS server; it bypasses the hosts file and OS DNS cache and discloses
+looked-up hostnames to Cloudflare/Google. No live DoH request is made by tests.
+
 Only `text/plain`, `text/html`, `text/csv`, `application/xhtml+xml`,
 `application/json` and `application/pdf` are accepted. The transport requests
 identity encoding and rejects compressed responses, invalid/ambiguous framing,

@@ -3,14 +3,16 @@
 import asyncio
 import http.client
 import ipaddress
+import json
 import math
+import os
 import socket
 import ssl
 import threading
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Awaitable, Callable, Protocol
+from typing import Awaitable, Callable, Mapping, Protocol
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import certifi
@@ -239,6 +241,166 @@ def system_resolver(host: str, port: int) -> tuple[str, ...]:
         host, port, type=socket.SOCK_STREAM)))
 
 
+DNS_RESOLVER_ENV = "DEEPDIVE_DNS_RESOLVER"
+# Fixed IP-literal JSON endpoints; certificates are verified against these IPs.
+DOH_ENDPOINTS: tuple[tuple[str, str], ...] = (("1.1.1.1", "/dns-query"), ("8.8.8.8", "/resolve"))
+DOH_ATTEMPT_SECONDS = 2.5
+DOH_MAX_RESPONSE_BYTES = 65_536
+DOH_MAX_ANSWERS = 32
+
+
+class _DoHFailure(Exception):
+    """Internal only; never carries provider detail outside the resolver."""
+
+
+def _doh_connection(address: str, timeout: float) -> http.client.HTTPSConnection:
+    return http.client.HTTPSConnection(address, 443, timeout=timeout,
+                                       context=ssl.create_default_context(cafile=certifi.where()))
+
+
+def _plain_int(value: object) -> bool:
+    return type(value) is int
+
+
+class DoHResolver:
+    """IPv4 lookups over DNS-over-HTTPS JSON with one fallback endpoint.
+
+    Endpoints are fixed IP literals, so no system DNS is used. Each attempt is
+    bounded by a deadline timer and a response byte cap. Answers are returned to
+    PublicHTTPTransport, which still requires every address to be public.
+    """
+
+    def __init__(self, connect: Callable[[str, float], http.client.HTTPConnection] = _doh_connection,
+                 clock: Callable[[], float] = time.monotonic):
+        self._connect = connect
+        self._clock = clock
+
+    def __call__(self, host: str, port: int) -> tuple[str, ...]:
+        try:
+            return (str(ipaddress.ip_address(host)),)
+        except ValueError:
+            pass
+        if (not isinstance(host, str) or not 0 < len(host) <= 253
+                or any(not 0 < len(label) <= 63 for label in host.split("."))
+                or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-." for c in host)):
+            raise socket.gaierror(socket.EAI_NONAME, "DNS-over-HTTPS name rejected")
+        timeouts = 0
+        for address, path in DOH_ENDPOINTS:
+            try:
+                return self._query(address, path, host)
+            except TimeoutError:
+                timeouts += 1
+            except (_DoHFailure, OSError, http.client.HTTPException, ValueError, RecursionError):
+                pass
+        if timeouts == len(DOH_ENDPOINTS):
+            raise TimeoutError("DNS-over-HTTPS resolution timed out")
+        raise socket.gaierror(socket.EAI_FAIL, "DNS-over-HTTPS resolution failed")
+
+    def _query(self, address: str, path: str, host: str) -> tuple[str, ...]:
+        deadline = self._clock() + DOH_ATTEMPT_SECONDS
+        connection = self._connect(address, DOH_ATTEMPT_SECONDS)
+        expired = threading.Event()
+
+        def abort() -> None:
+            expired.set()
+            active = connection.sock
+            if active is not None:
+                try:
+                    active.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                active.close()
+
+        timer = threading.Timer(DOH_ATTEMPT_SECONDS, abort)
+        timer.daemon = True
+        timer.start()
+        response = None
+        try:
+            connection.request("GET", f"{path}?name={quote(host, safe='')}&type=A", headers={
+                "Accept": "application/dns-json", "Accept-Encoding": "identity"})
+            response = connection.getresponse()
+            if response.status != 200:
+                raise _DoHFailure
+            if (response.getheader("content-encoding") or "identity").lower() != "identity":
+                raise _DoHFailure
+            length = response.getheader("content-length")
+            if length is not None and (not length.isascii() or not length.isdecimal()
+                                       or len(length) > 20 or int(length) > DOH_MAX_RESPONSE_BYTES):
+                raise _DoHFailure
+            chunks: list[bytes] = []
+            size = 0
+            while True:
+                if self._clock() >= deadline or expired.is_set():
+                    raise TimeoutError
+                chunk = response.read1(DOH_MAX_RESPONSE_BYTES + 1 - size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+                if size > DOH_MAX_RESPONSE_BYTES:
+                    raise _DoHFailure
+            if self._clock() >= deadline or expired.is_set():
+                raise TimeoutError
+            if length is not None and size != int(length):
+                raise _DoHFailure
+            return self._parse(b"".join(chunks), host)
+        except (OSError, http.client.HTTPException):
+            if expired.is_set():
+                raise TimeoutError from None
+            raise
+        finally:
+            timer.cancel()
+            if response is not None:
+                response.close()
+            connection.close()
+
+    @staticmethod
+    def _parse(body: bytes, host: str) -> tuple[str, ...]:
+        def reject_constant(_: str) -> None:
+            raise _DoHFailure
+
+        data = json.loads(body.decode("utf-8"), parse_constant=reject_constant)
+        if (not isinstance(data, dict) or not _plain_int(data.get("Status")) or data["Status"] != 0
+                or data.get("TC") is not False):
+            raise _DoHFailure
+        question = data.get("Question")
+        if (not isinstance(question, list) or not any(
+                isinstance(q, dict) and isinstance(q.get("name"), str)
+                and q["name"].rstrip(".").lower() == host and q.get("type") == 1 and _plain_int(q.get("type"))
+                for q in question)):
+            raise _DoHFailure
+        answers = data.get("Answer")
+        if not isinstance(answers, list) or not 0 < len(answers) <= DOH_MAX_ANSWERS:
+            raise _DoHFailure
+        addresses = []
+        for answer in answers:
+            if not isinstance(answer, dict) or not _plain_int(answer.get("type")):
+                raise _DoHFailure
+            if answer["type"] != 1:
+                continue
+            value = answer.get("data")
+            if not isinstance(value, str):
+                raise _DoHFailure
+            try:
+                addresses.append(str(ipaddress.IPv4Address(value)))
+            except ValueError:
+                raise _DoHFailure from None
+        if not addresses:
+            raise _DoHFailure
+        return tuple(dict.fromkeys(addresses))
+
+
+def resolver_from_environment(environment: Mapping[str, str] | None = None) -> Resolver:
+    """`system` (default) or `doh`; any other value is rejected without echoing it."""
+    values = os.environ if environment is None else environment
+    choice = values.get(DNS_RESOLVER_ENV, "system")
+    if choice == "system":
+        return system_resolver
+    if choice == "doh":
+        return DoHResolver()
+    raise ValueError(f"{DNS_RESOLVER_ENV} must be 'system' or 'doh'")
+
+
 class _PinnedConnection(http.client.HTTPConnection):
     """Connect directly to a validated IP; retain original Host and TLS identity."""
 
@@ -272,8 +434,8 @@ class PublicHTTPTransport:
     A late DNS result is discarded before opening a connection using the deadline.
     """
 
-    def __init__(self, resolver: Resolver = system_resolver):
-        self._resolver = resolver
+    def __init__(self, resolver: Resolver | None = None):
+        self._resolver = resolver if resolver is not None else resolver_from_environment()
 
     async def send(self, request: HTTPRequest) -> HTTPResponse:
         if request.progress is None:
