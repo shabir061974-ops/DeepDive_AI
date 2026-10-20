@@ -775,7 +775,10 @@ resolves IPv4 (A) records over DNS-over-HTTPS JSON at fixed IP endpoints
 certifi verification against the endpoint IP, no proxy, a 2.5-second deadline and
 65,536-byte cap per attempt. Status, truncation, question name, answer count and
 every address are validated strictly; the returned addresses still pass the same
-public-IP check and pinning above. Any other value is rejected; unset it or use
+public-IP check and pinning above. Successful all-public answers are cached per
+process for their minimum record TTL (capped at 300 seconds, at most 64 hosts,
+least-recently-used eviction); failures, zero/invalid TTLs and any non-public
+address are never cached, and hits are re-checked before use. Any other value is rejected; unset it or use
 `system` to roll back. This is for hosts whose OS resolver waits on an
 unresponsive DNS server; it bypasses the hosts file and OS DNS cache and discloses
 looked-up hostnames to Cloudflare/Google. No live DoH request is made by tests.

@@ -10,6 +10,7 @@ import socket
 import ssl
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Awaitable, Callable, Mapping, Protocol
@@ -247,6 +248,54 @@ DOH_ENDPOINTS: tuple[tuple[str, str], ...] = (("1.1.1.1", "/dns-query"), ("8.8.8
 DOH_ATTEMPT_SECONDS = 2.5
 DOH_MAX_RESPONSE_BYTES = 65_536
 DOH_MAX_ANSWERS = 32
+DOH_CACHE_MAX_TTL_SECONDS = 300
+DOH_CACHE_MAX_ENTRIES = 64
+
+
+class DoHCache:
+    """Bounded, thread-safe LRU of successful, all-public DoH answers.
+
+    Entries expire at the answer's minimum TTL, capped at DOH_CACHE_MAX_TTL_SECONDS.
+    Failures and answers containing any non-public address are never stored, and
+    hits are revalidated against public_ip before use.
+    """
+
+    def __init__(self, max_entries: int = DOH_CACHE_MAX_ENTRIES,
+                 max_ttl_seconds: float = DOH_CACHE_MAX_TTL_SECONDS):
+        positive_int(max_entries, "max_entries")
+        if type(max_ttl_seconds) not in (int, float) or not math.isfinite(max_ttl_seconds) or max_ttl_seconds <= 0:
+            raise ValueError("max_ttl_seconds must be finite and positive")
+        self._max_entries = max_entries
+        self._max_ttl = max_ttl_seconds
+        self._entries: OrderedDict[str, tuple[float, tuple[str, ...]]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+    def get(self, host: str, now: float) -> tuple[str, ...] | None:
+        with self._lock:
+            entry = self._entries.get(host)
+            if entry is None:
+                return None
+            expires, addresses = entry
+            if now >= expires or not addresses or any(not public_ip(ip) for ip in addresses):
+                del self._entries[host]
+                return None
+            self._entries.move_to_end(host)
+            return addresses
+
+    def put(self, host: str, addresses: tuple[str, ...], ttl: int, now: float) -> None:
+        if type(ttl) is not int or ttl <= 0 or not addresses or any(not public_ip(ip) for ip in addresses):
+            return
+        with self._lock:
+            for key in [key for key, (expires, _) in self._entries.items() if now >= expires]:
+                del self._entries[key]
+            self._entries[host] = (now + min(ttl, self._max_ttl), tuple(addresses))
+            self._entries.move_to_end(host)
+            while len(self._entries) > self._max_entries:
+                self._entries.popitem(last=False)
 
 
 class _DoHFailure(Exception):
@@ -271,9 +320,10 @@ class DoHResolver:
     """
 
     def __init__(self, connect: Callable[[str, float], http.client.HTTPConnection] = _doh_connection,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic, cache: DoHCache | None = None):
         self._connect = connect
         self._clock = clock
+        self._cache = cache if cache is not None else DoHCache()
 
     def __call__(self, host: str, port: int) -> tuple[str, ...]:
         try:
@@ -284,10 +334,15 @@ class DoHResolver:
                 or any(not 0 < len(label) <= 63 for label in host.split("."))
                 or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-." for c in host)):
             raise socket.gaierror(socket.EAI_NONAME, "DNS-over-HTTPS name rejected")
+        cached = self._cache.get(host, self._clock())
+        if cached is not None:
+            return cached
         timeouts = 0
         for address, path in DOH_ENDPOINTS:
             try:
-                return self._query(address, path, host)
+                addresses, ttl = self._query(address, path, host)
+                self._cache.put(host, addresses, ttl, self._clock())
+                return addresses
             except TimeoutError:
                 timeouts += 1
             except (_DoHFailure, OSError, http.client.HTTPException, ValueError, RecursionError):
@@ -296,7 +351,7 @@ class DoHResolver:
             raise TimeoutError("DNS-over-HTTPS resolution timed out")
         raise socket.gaierror(socket.EAI_FAIL, "DNS-over-HTTPS resolution failed")
 
-    def _query(self, address: str, path: str, host: str) -> tuple[str, ...]:
+    def _query(self, address: str, path: str, host: str) -> tuple[tuple[str, ...], int]:
         deadline = self._clock() + DOH_ATTEMPT_SECONDS
         connection = self._connect(address, DOH_ATTEMPT_SECONDS)
         expired = threading.Event()
@@ -355,7 +410,8 @@ class DoHResolver:
             connection.close()
 
     @staticmethod
-    def _parse(body: bytes, host: str) -> tuple[str, ...]:
+    def _parse(body: bytes, host: str) -> tuple[tuple[str, ...], int]:
+        """Return validated A addresses and the minimum record TTL (0 = do not cache)."""
         def reject_constant(_: str) -> None:
             raise _DoHFailure
 
@@ -373,9 +429,13 @@ class DoHResolver:
         if not isinstance(answers, list) or not 0 < len(answers) <= DOH_MAX_ANSWERS:
             raise _DoHFailure
         addresses = []
+        ttls = []
         for answer in answers:
             if not isinstance(answer, dict) or not _plain_int(answer.get("type")):
                 raise _DoHFailure
+            # A missing or invalid TTL never fails the lookup; it only disables caching.
+            ttl = answer.get("TTL")
+            ttls.append(ttl if _plain_int(ttl) and ttl >= 0 else 0)
             if answer["type"] != 1:
                 continue
             value = answer.get("data")
@@ -387,7 +447,10 @@ class DoHResolver:
                 raise _DoHFailure from None
         if not addresses:
             raise _DoHFailure
-        return tuple(dict.fromkeys(addresses))
+        return tuple(dict.fromkeys(addresses)), min(ttls)
+
+
+_PROCESS_DOH_CACHE = DoHCache()
 
 
 def resolver_from_environment(environment: Mapping[str, str] | None = None) -> Resolver:
@@ -397,7 +460,7 @@ def resolver_from_environment(environment: Mapping[str, str] | None = None) -> R
     if choice == "system":
         return system_resolver
     if choice == "doh":
-        return DoHResolver()
+        return DoHResolver(cache=_PROCESS_DOH_CACHE)
     raise ValueError(f"{DNS_RESOLVER_ENV} must be 'system' or 'doh'")
 
 
