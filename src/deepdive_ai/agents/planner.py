@@ -18,9 +18,14 @@ class MeshPlannerAgent:
         limits = self.llm.limits
         text(question.id, limits.max_text_chars)
         text(question.text, limits.max_question_chars)
+        if limits.max_tasks == 1:
+            scope = ("Return exactly ONE task: a single specific research query covering the entire question, "
+                     "including any comparison and counter-evidence. Never return more than one task. ")
+        else:
+            scope = ("Decompose this question into independent, specific research queries. "
+                     f"Return 1 to {limits.max_tasks} tasks. Include tasks checking counter-evidence. ")
         result = object_fields(await self.llm.ask(
-            "planner", "Decompose this question into independent, specific research queries. "
-            f"Return 1 to {limits.max_tasks} tasks. Include tasks checking counter-evidence. "
+            "planner", scope +
             f"Each instruction must be a nonempty string of at most {limits.max_text_chars} characters. "
             "Do not answer the question or generate URLs.",
             {"tasks": [{"instruction": "nonempty research query"}]},
