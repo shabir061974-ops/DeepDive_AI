@@ -249,7 +249,7 @@ async def run_live(
                                                model=options.model if name == "mesh" else None,
                                                source_diagnostics=name == "source")
         limits = AgentLimits(max_tasks=1, max_claims=2, max_question_chars=160, max_text_chars=160,
-                             discovery_results_per_task=1, max_model_calls=7, max_discovery_calls=2,
+                             discovery_results_per_task=2, sources_per_task=1, max_model_calls=7, max_discovery_calls=2,
                              max_fetch_calls=2, max_document_bytes=256_000, chunks_per_document=1,
                              max_prompt_chars=20_000, max_response_chars=16_000, output_tokens=1024)
         workflow = build_research_workflow(

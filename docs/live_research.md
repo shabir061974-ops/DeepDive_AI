@@ -199,8 +199,8 @@ put secrets into questions or untrusted research content.
 | Mesh | At most seven client HTTP attempts total, no retries, 25 seconds each |
 | Mesh output | 1,024 requested tokens each; valid reported usage required and <=1,024 |
 | Mesh bytes | 24,000 request-body bytes; 32,768 response bytes per request |
-| Brave | At most two GETs, one result per search, no retries, ten seconds each |
-| Source retrieval | At most two fetch operations / four HTTP attempts including redirects; no retries, ten seconds each |
+| Brave | At most two GETs, two results per search, no retries, ten seconds each |
+| Source retrieval | At most two fetch operations / four HTTP attempts including redirects; no retries, ten seconds each. One source is kept per task: the second result is fetched only if the first fails (any non-200 status, transport/TLS/DNS/timeout failure, unsafe redirect or oversized response). A failed source is never retried and adds no evidence; if both fail the run fails |
 | Source redirects/bytes | At most one redirect per fetch, existing SSRF checks; 256,000 response bytes |
 | Extraction | Existing bounded HTML and resource-isolated PDF implementation, PDF <=3 pages |
 | Entire run | 120-second overall awaited deadline |

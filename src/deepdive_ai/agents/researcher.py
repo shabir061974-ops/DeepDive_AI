@@ -4,11 +4,18 @@ import json
 from typing import Protocol
 
 from ..discovery import DiscoveredSource, SourceDiscovery
-from ..http_transport import validate_url
+from ..http_transport import ResponseTooLarge, TransportError, UnsafeURL, validate_url
 from ..extraction import BoundedContentExtractor, ContentExtractor, TextArtifact
 from ..models import Evidence, ResearchBundle, ResearchQuestion, ResearchTask, VerificationResult, records
-from ..retrieval import RetrievedDocument, SearchRequest, WebRetriever
+from ..retrieval import RetrievalError, RetrievedDocument, SearchRequest, WebRetriever
 from .common import AgentBudget, AgentError, AgentLimitError, AgentLimits, text
+
+
+# Failures confined to one candidate's fetch: access refused or any non-200 status,
+# transport/TLS/DNS/timeout, unsafe redirects and oversized responses. The candidate
+# contributes nothing and is not retried. Request-budget exhaustion and every check
+# after a document is returned (integrity, provenance, extraction) stay fatal.
+CANDIDATE_FETCH_FAILURES = (RetrievalError, TransportError, UnsafeURL, ResponseTooLarge)
 
 
 class ResearcherAgent(Protocol):
@@ -144,7 +151,11 @@ class RetrievalResearcherAgent:
             if (not isinstance(candidates, tuple) or len(candidates) > self.limits.discovery_results_per_task
                     or any(not isinstance(item, DiscoveredSource) for item in candidates)):
                 raise AgentError("Discovery returned invalid or excessive candidates")
+            retrieved = 0
+            last_failure: Exception | None = None
             for candidate in candidates:
+                if retrieved >= self.limits.sources_per_task:
+                    break
                 url = validate_url(candidate.url)
                 if (task.id, url) in seen:
                     continue
@@ -152,6 +163,9 @@ class RetrievalResearcherAgent:
                 self.budget.consume("fetch")
                 try:
                     document = await asyncio.wait_for(self.retriever.fetch(url), self.limits.operation_timeout_seconds)
+                except CANDIDATE_FETCH_FAILURES as error:
+                    last_failure = error
+                    continue
                 except Exception:
                     raise AgentError("Source retrieval failed") from None
                 if not isinstance(document, RetrievedDocument):
@@ -173,6 +187,14 @@ class RetrievalResearcherAgent:
                         raise AgentError("Evidence identifier collides with different content")
                     evidence.setdefault(item.id, item)
                 self._check_bundle(ResearchBundle(tuple(sources.values()), tuple(evidence.values())))
+                retrieved += 1
+            if last_failure is not None and not retrieved:
+                # Same shape as `raise ... from None` inside the handler: the message is
+                # suppressed, but typed transport diagnostics stay reachable via __context__.
+                error = AgentError("Source retrieval failed")
+                error.__context__ = last_failure
+                error.__suppress_context__ = True
+                raise error
         return ResearchBundle(tuple(sources.values()), tuple(evidence.values()))
 
 

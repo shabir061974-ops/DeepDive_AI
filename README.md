@@ -163,7 +163,7 @@ code. Do not print keys or private file contents to troubleshoot configuration.
 | Dashboard | Fixed scenarios and bounded fixture workflow | No credentials/external requests; in-memory audit and explicit Markdown download |
 | Provider connectivity | At most one request per selected provider, zero retries; Mesh 15 seconds/64 output tokens, Brave 10 seconds | Offline preflight by default; execution and spending acknowledgements required |
 | Source-only diagnostic | One fixed public-source GET, zero retries/redirects, 10 seconds, 256,000 response bytes | Offline preflight by default; no provider keys; separate execution authorization |
-| Live research CLI | One task, two claims per round, at most one research retry; Mesh <=7 calls, Brave <=2 calls, source <=2 fetches/<=4 HTTP exchanges including redirects | Offline preflight by default; explicit execution, rates and risk acknowledgements; no fixture fallback |
+| Live research CLI | One task, two claims per round, at most one research retry; Mesh <=7 calls, Brave <=2 calls, source <=2 fetches/<=4 HTTP exchanges including redirects; the second search result is fetched only if the first source fails | Offline preflight by default; explicit execution, rates and risk acknowledgements; no fixture fallback |
 | GitHub live demo | The live CLI profile above, run once per manual trigger on a Windows runner, with no retries | Owner-approved `live-demo` environment; public sanitized step summary; no artifacts. See [GitHub live demo](docs/live_research.md#github-live-demo) for setup, visibility and cost |
 | Library adapters | Configurable defaults, distinct from the live CLI profile | Generic library retry defaults do not describe live execution |
 

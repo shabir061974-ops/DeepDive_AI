@@ -72,6 +72,9 @@ class AgentLimits:
     chunk_bytes: int = 2_000
     chunks_per_document: int = 4
     discovery_results_per_task: int = 3
+    # Successful sources kept per task. Later candidates are fetched only while fewer
+    # than this many have succeeded, so they act as fallbacks for failed ones.
+    sources_per_task: int = 20
     max_model_calls: int = 64
     max_discovery_calls: int = 32
     max_fetch_calls: int = 32
