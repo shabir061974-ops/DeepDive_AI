@@ -17,7 +17,7 @@ from .http_transport import (
     FailureCategory, HTTPError, HTTPRequest, HTTPResponse, HTTPTransport,
     PublicHTTPTransport, RequestPolicy, status_category, validate_url,
 )
-from .mesh import (MeshAPIClient, MeshSettings, classify_mesh_response,
+from .mesh import (MeshAPIClient, MeshCompletionCheck, MeshError, MeshSettings, classify_mesh_response,
                    mesh_identity_checks, mesh_routing_rejection_codes)
 from .models import ResearchQuestion, nonempty
 from .persistence import JsonlAuditSink, write_record
@@ -192,8 +192,11 @@ def http_failure(error: BaseException) -> dict | None:
             break
         seen.add(id(error))
         if isinstance(error, HTTPError):
-            return {"category": error.category.value, "stage": error.stage.value if error.stage else None,
-                    "http_status": error.http_status}
+            details = {"category": error.category.value, "stage": error.stage.value if error.stage else None,
+                       "http_status": error.http_status}
+            if isinstance(error, MeshError) and isinstance(error.completion_check, MeshCompletionCheck):
+                details["mesh_completion_check"] = error.completion_check.value
+            return details
         nested = error.__cause__ if error.__cause__ is not None else error.__context__
         if nested is None:
             break

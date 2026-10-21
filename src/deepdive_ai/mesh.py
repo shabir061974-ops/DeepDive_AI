@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Awaitable, Callable, Mapping, Protocol
 
 from .http_transport import (
@@ -82,8 +83,40 @@ class DisabledMeshClient:
         raise RuntimeError("Mesh transport is disabled in Phase 1")
 
 
+class MeshCompletionCheck(StrEnum):
+    """Fixed name of the completion check a Mesh response failed; never a raw value."""
+
+    UNSUPPORTED_CONTENT_TYPE = "unsupported_content_type"
+    ENVELOPE_INVALID = "envelope_invalid"
+    CHOICES_INVALID = "choices_invalid"
+    FINISH_REASON_LENGTH = "finish_reason_length"
+    FINISH_REASON_CONTENT_FILTER = "finish_reason_content_filter"
+    FINISH_REASON_TOOL_CALLS = "finish_reason_tool_calls"
+    FINISH_REASON_OTHER = "finish_reason_other"
+    FINISH_REASON_MISSING = "finish_reason_missing"
+    MESSAGE_INVALID = "message_invalid"
+    TOOL_CALLS_PRESENT = "tool_calls_present"
+    CONTENT_NOT_TEXT = "content_not_text"
+    CONTENT_EMPTY = "content_empty"
+
+
+def _finish_reason_check(value: object) -> MeshCompletionCheck:
+    if value is None:
+        return MeshCompletionCheck.FINISH_REASON_MISSING
+    return {"length": MeshCompletionCheck.FINISH_REASON_LENGTH,
+            "content_filter": MeshCompletionCheck.FINISH_REASON_CONTENT_FILTER,
+            "tool_calls": MeshCompletionCheck.FINISH_REASON_TOOL_CALLS,
+            "function_call": MeshCompletionCheck.FINISH_REASON_TOOL_CALLS,
+            }.get(value, MeshCompletionCheck.FINISH_REASON_OTHER) if isinstance(value, str) \
+        else MeshCompletionCheck.FINISH_REASON_OTHER
+
+
 class MeshError(HTTPError):
     """Sanitized Mesh failure; upstream bodies and credentials are never echoed."""
+
+    def __init__(self, message: str = "", *, completion_check: MeshCompletionCheck | None = None, **kwargs):
+        super().__init__(message, **kwargs)
+        self.completion_check = completion_check if isinstance(completion_check, MeshCompletionCheck) else None
 
 
 class MeshIdentityError(MeshError):
@@ -268,30 +301,45 @@ class MeshAPIClient:
              ("Content-Type", "application/json"), ("Accept", "application/json"),
              ("Accept-Encoding", "identity")), payload)
         if response.status != 200:
-            raise MeshError(f"Mesh request failed with HTTP status {response.status}")
+            raise MeshError(f"Mesh request failed with HTTP status {response.status}", http_status=response.status)
         if classify_mesh_response(response).rejection_codes:
             raise MeshError("Mesh response classification rejected", category=FailureCategory.VALIDATION,
                             http_status=200)
         media_type = (response.header("content-type") or "").split(";", 1)[0].strip().lower()
         if media_type != "application/json":
-            raise MeshError("Mesh returned an unsupported response type")
+            raise MeshError("Mesh returned an unsupported response type", http_status=200,
+                            completion_check=MeshCompletionCheck.UNSUPPORTED_CONTENT_TYPE)
+        # Every check below must pass, exactly as before. `check` only names the first
+        # one that failed, as a fixed code; no response value is retained.
+        check = MeshCompletionCheck.ENVELOPE_INVALID
         try:
             data = json.loads(response.body.decode("utf-8"), object_pairs_hook=_json_object,
                               parse_constant=_invalid_constant)
-            if not isinstance(data, dict) or not isinstance(data.get("id"), str):
+            if not isinstance(data, dict) or not isinstance(data.get("id"), str) or not data["id"].strip():
                 raise ValueError
+            check = MeshCompletionCheck.CHOICES_INVALID
             choices = data.get("choices")
             if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
                 raise ValueError
             choice = choices[0]
             message = choice.get("message")
-            if (choice.get("finish_reason") != "stop" or not isinstance(message, dict)
-                    or message.get("role") != "assistant" or message.get("tool_calls")
-                    or not isinstance(message.get("content"), str)):
+            if choice.get("finish_reason") != "stop":
+                check = _finish_reason_check(choice.get("finish_reason"))
                 raise ValueError
+            check = MeshCompletionCheck.MESSAGE_INVALID
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                raise ValueError
+            check = MeshCompletionCheck.TOOL_CALLS_PRESENT
+            if message.get("tool_calls"):
+                raise ValueError
+            check = MeshCompletionCheck.CONTENT_NOT_TEXT
+            if not isinstance(message.get("content"), str):
+                raise ValueError
+            check = MeshCompletionCheck.CONTENT_EMPTY
             completion = MeshResponse(message["content"], data["id"])
             if not all(mesh_identity_checks(response, request.model, data.get("model")).values()):
                 raise MeshIdentityError("Mesh model or routing metadata rejected", http_status=200)
             return completion
         except (ValueError, TypeError, KeyError, RecursionError):
-            raise MeshError("Mesh returned a malformed or incomplete completion") from None
+            raise MeshError("Mesh returned a malformed or incomplete completion", http_status=200,
+                            completion_check=check) from None

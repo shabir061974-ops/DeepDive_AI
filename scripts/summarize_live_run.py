@@ -2,7 +2,8 @@
 
 Reads only the CLI's JSON output and that run's own `audit.jsonl` and
 `report.json`. Prints fixed codes, counts, allowlisted failure diagnostics
-(category, transport stage, HTTP status, validated source hostname), claim text,
+(category, transport stage, HTTP status, Mesh completion check, validated source
+hostname), claim text,
 verdicts and citation URLs; never prompts, raw model output, raw exceptions,
 rationales, excerpts or credentials.
 Model and source text is untrusted: it is cleaned, bounded and rendered only
@@ -48,6 +49,11 @@ FAILURE_CATEGORIES = frozenset({
 TRANSPORT_STAGES = frozenset({"worker_queue", "dns", "tcp_connect", "tls_handshake", "send_request",
                               "response_headers", "response_body"})
 HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+# deepdive_ai.mesh.MeshCompletionCheck values: which completion check a Mesh response failed.
+MESH_COMPLETION_CHECKS = frozenset({
+    "unsupported_content_type", "envelope_invalid", "choices_invalid", "finish_reason_length",
+    "finish_reason_content_filter", "finish_reason_tool_calls", "finish_reason_other", "finish_reason_missing",
+    "message_invalid", "tool_calls_present", "content_not_text", "content_empty"})
 
 
 def text(value: object, limit: int = MAX_TEXT_CHARS) -> str:
@@ -121,6 +127,9 @@ def diagnostic_rows(result: dict) -> list[str]:
                   f"| Category | {allowed(details.get('category'), FAILURE_CATEGORIES)} |",
                   f"| Stage | {allowed(details.get('stage'), TRANSPORT_STAGES)} |",
                   f"| HTTP status | {http_status(details.get('http_status'))} |"]
+        if "mesh_completion_check" in details:
+            lines.append(f"| Mesh completion check | "
+                         f"{allowed(details.get('mesh_completion_check'), MESH_COMPLETION_CHECKS)} |")
     diagnostics = result.get("diagnostics")
     rows = []
     if isinstance(diagnostics, dict):
