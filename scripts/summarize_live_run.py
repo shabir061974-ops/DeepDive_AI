@@ -54,6 +54,10 @@ MESH_COMPLETION_CHECKS = frozenset({
     "unsupported_content_type", "envelope_invalid", "choices_invalid", "finish_reason_length",
     "finish_reason_content_filter", "finish_reason_tool_calls", "finish_reason_other", "finish_reason_missing",
     "message_invalid", "tool_calls_present", "content_not_text", "content_empty"})
+# deepdive_ai.agents.common AgentFailureLocation / AgentValueShape values.
+FAILURE_LOCATIONS = frozenset({"whole_reply", "claim_row"})
+VALUE_SHAPES = frozenset({"object", "array", "string", "number", "boolean", "null"})
+MAX_FAILURE_ROW = 1000
 
 
 def text(value: object, limit: int = MAX_TEXT_CHARS) -> str:
@@ -249,6 +253,13 @@ def build(preflight: object, outcome: object, reports_root: Path) -> str:
     for field in ("failure_category", "agent_failure_code", "agent_json_shape"):
         if field in result:
             lines.append(f"| {field.replace('_', ' ').capitalize()} | {code(result.get(field))} |")
+    if "agent_failure_location" in result:
+        lines.append(f"| Agent failure location | {allowed(result.get('agent_failure_location'), FAILURE_LOCATIONS)} |")
+    if "agent_failure_row" in result:
+        row = result.get("agent_failure_row")
+        lines.append(f"| Agent failure row | {row if type(row) is int and 1 <= row <= MAX_FAILURE_ROW else 'invalid'} |")
+    if "agent_value_shape" in result:
+        lines.append(f"| Agent value shape | {allowed(result.get('agent_value_shape'), VALUE_SHAPES)} |")
     lines.append(f"| Cost status | {code(result.get('cost_status'))} |")
     blockers = result.get("blockers") if isinstance(result.get("blockers"), list) else []
     if blockers:

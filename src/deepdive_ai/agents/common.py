@@ -30,6 +30,7 @@ class AgentFailureCode(StrEnum):
     MALFORMED_JSON = "malformed_agent_json"
     EMPTY_TASKS = "empty_planner_tasks"
     DUPLICATE_TASKS = "duplicate_planner_tasks"
+    DRAFTER_INVALID_STATUS = "drafter_invalid_status"
     VERIFIER_CLAIM_ID_MISMATCH = "verifier_claim_id_mismatch"
     VERIFIER_INVALID_VERDICT = "verifier_invalid_verdict"
     VERIFIER_EVIDENCE_ID_INVALID = "verifier_evidence_id_invalid"
@@ -55,12 +56,64 @@ class AgentJSONShape(StrEnum):
     INVALID_SYNTAX = "invalid_syntax"
 
 
+class AgentFailureLocation(StrEnum):
+    """Where in an agent reply a contract check failed."""
+
+    WHOLE_REPLY = "whole_reply"
+    CLAIM_ROW = "claim_row"
+
+
+class AgentValueShape(StrEnum):
+    """JSON type of the value that failed a contract check. Never the value itself."""
+
+    OBJECT = "object"
+    ARRAY = "array"
+    STRING = "string"
+    NUMBER = "number"
+    BOOLEAN = "boolean"
+    NULL = "null"
+
+
+def value_shape(value: object) -> AgentValueShape | None:
+    if value is None:
+        return AgentValueShape.NULL
+    if isinstance(value, bool):
+        return AgentValueShape.BOOLEAN
+    if isinstance(value, (int, float)):
+        return AgentValueShape.NUMBER
+    if isinstance(value, str):
+        return AgentValueShape.STRING
+    if isinstance(value, list):
+        return AgentValueShape.ARRAY
+    if isinstance(value, dict):
+        return AgentValueShape.OBJECT
+    return None
+
+
+MAX_DIAGNOSTIC_ROW = 1000
+_UNPARSED = object()
+
+
 class AgentOutputError(AgentError):
     def __init__(self, message: str, *, code: AgentFailureCode = AgentFailureCode.INVALID_OUTPUT,
                  json_shape: AgentJSONShape | None = None):
         super().__init__(message)
         self.code = code if isinstance(code, AgentFailureCode) else AgentFailureCode.INVALID_OUTPUT
         self.json_shape = json_shape if isinstance(json_shape, AgentJSONShape) else None
+        self.location: AgentFailureLocation | None = None
+        self.row_index: int | None = None
+        self.value_shape: AgentValueShape | None = None
+
+    def locate(self, location: AgentFailureLocation, value: object = _UNPARSED,
+               row_index: int | None = None) -> "AgentOutputError":
+        """Attach fixed, non-content diagnostics: location, 1-based row and JSON type only."""
+        if self.location is None and isinstance(location, AgentFailureLocation):
+            self.location = location
+            if type(row_index) is int and 1 <= row_index <= MAX_DIAGNOSTIC_ROW:
+                self.row_index = row_index
+            if value is not _UNPARSED:
+                self.value_shape = value_shape(value)
+        return self
 
 
 class AgentLimitError(AgentError):

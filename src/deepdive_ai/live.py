@@ -273,6 +273,12 @@ async def run_live(
             result["agent_failure_code"] = error.code.value
             if error.json_shape is not None:
                 result["agent_json_shape"] = error.json_shape.value
+            if error.location is not None:
+                result["agent_failure_location"] = error.location.value
+            if error.row_index is not None:
+                result["agent_failure_row"] = error.row_index
+            if error.value_shape is not None:
+                result["agent_value_shape"] = error.value_shape.value
         details = http_failure(error)
         result["failure_category"] = ("agent_contract_failure" if isinstance(error, AgentOutputError) else
                                       "timeout" if isinstance(error, TimeoutError) else
