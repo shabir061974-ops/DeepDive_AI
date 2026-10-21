@@ -27,6 +27,13 @@ class MeshVerifierAgent:
         if len(claims) > limits.max_claims:
             raise AgentOutputError("Claim count exceeds verifier limit")
         known = {item.id: item for item in bundle.evidence}
+        if limits.quote_chars == limits.max_text_chars:
+            length_rule = (f"The overall rationale, every assessment rationale and every quote must each be at most "
+                           f"{limits.max_text_chars} characters; choose a shorter exact quote rather than exceed this limit.")
+        else:
+            length_rule = (f"The overall rationale and every assessment rationale must each be at most "
+                           f"{limits.max_text_chars} characters. Every quote must be at most {limits.quote_chars} "
+                           "characters; choose a shorter exact quote rather than exceed this limit.")
         results = []
         for claim in claims:
             text(claim.text, limits.max_text_chars)
@@ -47,9 +54,7 @@ class MeshVerifierAgent:
                 "For other relations quote may be empty. Never infer facts beyond supplied excerpts. "
                 "Verdict supported requires cited entailment and no contradictions; contradictory sources require "
                 "insufficient_evidence, unless no cited support exists and the claim is explicitly contradicted, "
-                "in which case use unsupported. Assess each evidence ID exactly once. "
-                f"The overall rationale, every assessment rationale and every quote must each be at most "
-                f"{limits.max_text_chars} characters; choose a shorter exact quote rather than exceed this limit.",
+                "in which case use unsupported. Assess each evidence ID exactly once. " + length_rule,
                 {"claim_id": "supplied claim id", "verdict": "supported|unsupported|insufficient_evidence",
                  "rationale": "semantic explanation",
                  "assessments": [{"evidence_id": "supplied id", "relation": "supports|contradicts|irrelevant|insufficient",
@@ -88,7 +93,7 @@ class MeshVerifierAgent:
                 if not isinstance(quote, str):
                     raise AgentOutputError("Verifier quote is invalid or too long",
                                            code=AgentFailureCode.VERIFIER_QUOTE_INVALID)
-                if len(quote) > limits.max_text_chars:
+                if len(quote) > limits.quote_chars:
                     raise AgentOutputError("Verifier quote is invalid or too long",
                                            code=AgentFailureCode.VERIFIER_QUOTE_TOO_LONG)
                 if relation in {"supports", "contradicts"} and not quote.strip():

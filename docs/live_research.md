@@ -209,7 +209,8 @@ The Mesh maximum is one planner call plus two rounds of one drafter and up to
 two verifier calls. The synthesizer adds no LLM request. Empty research may use
 fewer calls. The profile bounds attempts per process/run, not all invocations.
 Planner instructions/claims/rationales are limited to 160 characters in this
-controlled profile; verbose JSON fails instead of being repaired or retried.
+controlled profile; Verifier quotes may be up to 400 characters but must still
+be exact substrings of the retrieved excerpt; verbose JSON fails instead of being repaired or retried.
 Combined discovery queries must also satisfy the existing 400-character / 50-word
 limit; excess queries fail before Brave transmission. Evidence selection is
 bounded to one chunk per document and can miss relevant later content.

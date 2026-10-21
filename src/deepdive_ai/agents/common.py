@@ -91,6 +91,8 @@ class AgentLimits:
     max_fetch_calls: int = 32
     output_tokens: int = 4_096
     operation_timeout_seconds: float = 30.0
+    # Verifier quote length. None means the same limit as max_text_chars.
+    max_quote_chars: int | None = None
 
     def __post_init__(self) -> None:
         for item in fields(self):
@@ -98,12 +100,18 @@ class AgentLimits:
             if item.name == "operation_timeout_seconds":
                 if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= 300:
                     raise ValueError("operation timeout must be finite and between 0 and 300 seconds")
+            elif item.name == "max_quote_chars" and value is None:
+                continue
             elif type(value) is not int or value < 1:
                 raise ValueError("agent limits must be positive integers")
         if self.discovery_results_per_task > 20:
             raise ValueError("discovery result limit must not exceed 20")
         if self.chunk_bytes < 4:
             raise ValueError("chunk_bytes must accommodate a UTF-8 character")
+
+    @property
+    def quote_chars(self) -> int:
+        return self.max_text_chars if self.max_quote_chars is None else self.max_quote_chars
 
 
 class AgentBudget:
