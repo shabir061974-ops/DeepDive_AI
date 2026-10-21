@@ -271,6 +271,87 @@ independent benchmark or correctness guarantee. Inspect private audit/outcome
 and source citations after any authorized attempt. Do not rerun on failure or
 uncertainty without reviewing exposure and authorizing another invocation.
 
+## GitHub live demo
+
+[`.github/workflows/live-demo.yml`](../.github/workflows/live-demo.yml) runs the
+same live CLI on a GitHub-hosted Windows runner so the repository owner can show
+a genuine five-agent run with a public, sanitized summary. It is separate from
+the official Agent Arena checker, which stays an unmodified, inactive template.
+
+**Guarantees in the workflow:**
+
+- Started only manually (`workflow_dispatch`) from `master`; never on push, pull
+  request or a schedule. Each run waits for owner approval in the `live-demo`
+  environment.
+- `permissions: contents: read`, no OIDC token, checkout without persisted
+  credentials, and actions pinned to full commit SHAs.
+- Fixed model `google/gemini-2.5-flash`. The existing preflight must report
+  `ready: true` (gateway acknowledgement, spend confirmation, approved prices,
+  credentials) before the single `--execute` invocation. There are no retries,
+  and a run in progress is never cancelled by a newer one.
+- The unchanged live profile applies: Mesh <=7, Brave <=2, source <=4 HTTP
+  requests, a 120-second workflow deadline and the 10-minute job limit, plus every
+  routing, cache, JSON, evidence, TLS and SSRF check.
+- Provider keys are passed only to the preflight and execution steps. Inputs reach
+  scripts only through environment variables.
+- [`scripts/summarize_live_run.py`](../scripts/summarize_live_run.py) writes the
+  step summary: the five agent stages, status and failure codes, request counts,
+  claim text, verdicts and citation URLs. Model and source text is shown only as
+  bounded, cleaned literal code spans, so it cannot become links, images, HTML or
+  mentions. Prompts, rationales, excerpts and credentials are never printed.
+- Nothing is uploaded: the private `reports/live/<run-id>/` files stay on the
+  runner, which GitHub discards after the job.
+
+### One-time manual setup
+
+Do this in the GitHub web interface before the first run. No automation creates
+the environment or its secrets.
+
+1. Open the repository's **Settings → Environments → New environment** and name
+   it exactly `live-demo`.
+2. Under **Deployment protection rules**, enable **Required reviewers** and add
+   the repository owner (`shabir061974-ops`). If the owner is the only reviewer,
+   leave **Prevent self-review** off, or no one can approve.
+3. Under **Deployment branches and tags**, choose **Selected branches and tags**
+   and add the branch rule `master`.
+4. Under **Environment secrets**, add `MESH_API_KEY` and `BRAVE_SEARCH_API_KEY`.
+   Enter the values in the browser only. Do not create repository-level secrets
+   with these names: repository secrets are available to every workflow,
+   including the official checker if it is ever activated.
+5. Save. Do not run the workflow before steps 1–4: GitHub creates a missing
+   environment automatically without protection rules. Without secrets the
+   preflight fails safely (`provider_credentials_missing_or_invalid`) and no
+   provider request is made.
+
+### Running a demo
+
+1. Open **Actions → Live Research Demo → Run workflow** on `master`.
+2. Enter a new public question (at most 160 characters and 20 words). Reusing an
+   earlier question can be answered from Mesh's cache and rejected as
+   `cached_response_unverified`.
+3. Set `confirm_spend` to `yes`, enter the approved Mesh input/output and Brave
+   prices, and choose `system` DNS (default) or `doh`.
+4. Approve the pending `live-demo` deployment when GitHub asks for review.
+5. Read the result on the run's **Summary** page.
+
+A run that does not finish `verified` fails the job with the CLI's exit code
+(1 failed, 2 preflight blocked, 3 `needs_review`); the summary still shows how far
+it got. Review the failure before authorizing another run; never rerun automatically.
+
+### Visibility and cost
+
+The repository is public, so **anyone can read the run summary and logs**. They
+contain the question, fixed status codes, request counts, claim text, verdicts
+and citation URLs, but no keys, prompts, rationales or source excerpts.
+
+Each run is potentially billable. Upper bound per run at the currently approved
+prices (USD 0.30/2.50 per million Mesh input/output tokens, USD 0.005 per Brave
+request): Mesh about USD 0.03 (7 calls, 1,024 output tokens each, bounded prompts)
+plus Brave USD 0.01, so **about USD 0.04 at most**. The first completed local run
+used about USD 0.02 at most. GitHub-hosted runner minutes are free for public
+repositories. Brave or Mesh may treat cloud runner addresses differently from
+the local server; that has not been tested.
+
 ## Offline verification scope
 
 The final sprint fixes the reviewed enforced-timeout diagnostic gap. When a

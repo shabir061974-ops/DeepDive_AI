@@ -1,0 +1,137 @@
+name: Live Research Demo
+
+# Manual, owner-approved, potentially billable live research. One preflight, then at
+# most one execution; no retries. Setup and costs: docs/live_research.md#github-live-demo
+on:
+  workflow_dispatch:
+    inputs:
+      question:
+        description: Public research question (max 160 characters and 20 words; use a new question each run)
+        required: true
+        type: string
+      confirm_spend:
+        description: I accept gateway uncertainty and potential charges for one live run (about USD 0.04 at most)
+        required: true
+        type: choice
+        options: ["no", "yes"]
+        default: "no"
+      mesh_input_usd_per_million:
+        description: Approved Mesh input price, USD per million tokens
+        required: true
+        type: string
+      mesh_output_usd_per_million:
+        description: Approved Mesh output price, USD per million tokens
+        required: true
+        type: string
+      brave_usd_per_request:
+        description: Approved Brave price, USD per request
+        required: true
+        type: string
+      dns_resolver:
+        description: DNS resolver for provider and source lookups
+        required: true
+        type: choice
+        options: ["system", "doh"]
+        default: "system"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-demo
+  # Never cancel a run in progress: cancellation can still leave billable provider work.
+  cancel-in-progress: false
+
+jobs:
+  live-research:
+    if: github.ref == 'refs/heads/master'
+    runs-on: windows-2025
+    environment: live-demo
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONUTF8: "1"
+      LIVE_QUESTION: ${{ inputs.question }}
+      CONFIRM_SPEND: ${{ inputs.confirm_spend }}
+      MESH_INPUT_RATE: ${{ inputs.mesh_input_usd_per_million }}
+      MESH_OUTPUT_RATE: ${{ inputs.mesh_output_usd_per_million }}
+      BRAVE_RATE: ${{ inputs.brave_usd_per_request }}
+      DEEPDIVE_DNS_RESOLVER: ${{ inputs.dns_resolver }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install project
+        run: python -m pip install --disable-pip-version-check -e .
+
+      - name: Validate run confirmation
+        run: |
+          if ($env:CONFIRM_SPEND -cne 'yes') {
+            Write-Output '::error::Spend was not confirmed; no provider request was made.'
+            exit 1
+          }
+          if ($env:DEEPDIVE_DNS_RESOLVER -cnotin @('system', 'doh')) {
+            Write-Output '::error::Unsupported DNS resolver selection.'
+            exit 1
+          }
+
+      - name: Live preflight (no provider requests)
+        env:
+          MESH_API_KEY: ${{ secrets.MESH_API_KEY }}
+          BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
+        run: |
+          $liveArgs = @(
+            '--question', $env:LIVE_QUESTION
+            '--model', 'google/gemini-2.5-flash'
+            '--accept-gateway-uncertainty'
+            '--confirm-spend-controls'
+            '--mesh-input-usd-per-million', $env:MESH_INPUT_RATE
+            '--mesh-output-usd-per-million', $env:MESH_OUTPUT_RATE
+            '--brave-usd-per-request', $env:BRAVE_RATE
+          )
+          python -m deepdive_ai.live @liveArgs > "$env:RUNNER_TEMP/preflight.json"
+          $code = $LASTEXITCODE
+          $ready = $false
+          try { $ready = (Get-Content -Raw -LiteralPath "$env:RUNNER_TEMP/preflight.json" | ConvertFrom-Json).ready -eq $true } catch {}
+          if ($code -ne 0 -or -not $ready) {
+            Write-Output '::error::Live preflight is not ready; no paid execution was started.'
+            exit 1
+          }
+
+      - name: Execute one live research run (potentially billable)
+        env:
+          MESH_API_KEY: ${{ secrets.MESH_API_KEY }}
+          BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
+        run: |
+          $liveArgs = @(
+            '--question', $env:LIVE_QUESTION
+            '--model', 'google/gemini-2.5-flash'
+            '--accept-gateway-uncertainty'
+            '--confirm-spend-controls'
+            '--mesh-input-usd-per-million', $env:MESH_INPUT_RATE
+            '--mesh-output-usd-per-million', $env:MESH_OUTPUT_RATE
+            '--brave-usd-per-request', $env:BRAVE_RATE
+            '--execute'
+          )
+          python -m deepdive_ai.live @liveArgs > "$env:RUNNER_TEMP/outcome.json"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Output "::error::Live run did not finish with a verified report (exit code $code). Do not rerun automatically."
+          }
+          exit $code
+
+      # Runs after any outcome. Private reports stay on the discarded runner; nothing is uploaded.
+      - name: Write sanitized run summary
+        if: always()
+        run: >-
+          python scripts/summarize_live_run.py
+          --summary-file "$env:GITHUB_STEP_SUMMARY"
+          --preflight "$env:RUNNER_TEMP/preflight.json"
+          --outcome "$env:RUNNER_TEMP/outcome.json"
