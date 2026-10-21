@@ -4,14 +4,66 @@ Developed by Chabir Ahamad Abusali.
 
 ## Current submission evidence
 
-Latest verified checkpoint is `7a028fd682c5c11388d7c10ca1ae471b542aa265` on
-`master`. The previously verified
-[Offline CI run 39157978525](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39157978525)
-passed for that checkpoint. **320 offline Python tests passed**, along with six
-browser scenarios. This documentation correction does not claim a fresh test
-run, a new CI run or a completed live research run. The six separate scripted
-self-evaluation cases measure deterministic offline correctness, not genuine
-live research performance; their recorded results remain unchanged.
+Latest verified code checkpoint is `ee50eb28a2ce8769664a86f13ab5bad26458181a` on
+`master`. [Offline CI run 39494702168](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39494702168)
+passed for that checkpoint: **385 offline Python tests**, compilation, JavaScript
+syntax checks and the six-scenario browser smoke test. From that checkpoint, **one
+complete live five-agent research run passed** with report status `verified`
+(details below). The six separate scripted self-evaluation cases measure
+deterministic offline correctness, not live research performance; their recorded
+results remain unchanged.
+
+## Live run evidence
+
+On October 20, 2026 (20:52 UTC) the operator authorized one bounded live run of
+`python -m deepdive_ai.live --execute` at `ee50eb2`, with
+`DEEPDIVE_DNS_RESOLVER=doh` set for that PowerShell session only.
+
+| Item | Result |
+| --- | --- |
+| Run ID | `56943dceac174beebd53e9b10573344c` |
+| Question | "According to MDN, how does the HTTP 405 Method Not Allowed response differ from HTTP 501 Not Implemented?" |
+| Model | `google/gemini-2.5-flash` via Mesh; model identity and no-fallback routing checks passed on every response; no cache hit |
+| Agents | Planner, Researcher, Drafter, Verifier and Synthesizer all completed (audit: started → planned → researched → drafted → verified → completed) |
+| Requests | Mesh 4 (Planner, Drafter, Verifier ×2), Brave 1, source 1; profile limits 7/2/4; no research retry |
+| Duration | 25.8 s process wall time; 24.9 s between the first and last audit events; limit 120 s |
+| Report status | `verified`; 2 of 2 drafted claims supported |
+| Citation | Both claims cite <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/501>, extracted text characters 0–2000, with SHA-256 provenance for the page, extracted text and excerpt |
+| Cost | At most about USD 0.02: Brave 1 × USD 0.005, plus Mesh at operator-approved rates (USD 0.30 input / 2.50 output per million tokens) under the 1,024-output-token cap. Upper-bound estimate only; actual billing not verified |
+
+Verified claims, each with an exact quote from the retrieved excerpt:
+
+1. "A 501 Not Implemented response is appropriate when the server does not
+   recognize the request method and cannot support it for any resource."
+2. "If a server recognizes a method but intentionally does not allow it, the
+   appropriate response is 405 Method Not Allowed."
+
+Private run files (`manifest.json`, `audit.jsonl`, `outcome.json`, `report.json`)
+remain in ignored `reports/live/56943dceac174beebd53e9b10573344c/` and are not published.
+
+**Limitations.** This is one successful run, not a reliability measure. Five earlier
+October 20 attempts (table below) and the older `f1728f28…` attempt failed closed at different stages, and model-output
+variability remains. Semantic support was judged by the live Mesh Verifier;
+quotes were checked programmatically as exact substrings, but no person
+independently reviewed the claims, and no accuracy metric is claimed. Evidence came
+from a single source and one 2,000-character excerpt; the second allowed Brave
+request and further source requests were not used. The Brave/Mesh account prices
+are operator-attested, not verified.
+
+Earlier October 20 attempts, all from approved commits, all within limits and all
+stopped by existing safeguards rather than weakened ones:
+
+| Run | Stopped at | Cause and later fix |
+| --- | --- | --- |
+| `a8bfd225b93b4ab5a883399a461232dc` | Planner response | Mesh cache hit without routing metadata, rejected as `cached_response_unverified`; later runs used distinct questions |
+| `3e9c61faf37844d8b21a743f27dcfc2b` | Drafter | `malformed_agent_json`; Drafter and Verifier now accept one whole-document JSON fence, with shape diagnostics (`8188a02`) |
+| `beb6b6a8b55a428eacb63427bbaadd8c` | Planner | `list_limit_exceeded` (more than one task); one-task instruction clarified (`b062ebf`) |
+| `bc64041bbec74a939753dd9351b99d70` | Drafter | `text_limit_exceeded`; Drafter/Verifier instructions now state the configured text limit (`fd140a7`) |
+| `8a61c25a8e0c47ccb3aa61726bc0909d` | Verifier, second claim | DoH lookup timed out at both endpoints; bounded TTL cache of DoH answers added (`ee50eb2`) |
+
+Before these runs, slow cold DNS on the server (about 12 s, above the 10 s
+request deadline) was addressed by the optional DNS-over-HTTPS resolver (`38bf0f2`)
+without changing Windows networking.
 
 Use the [fresh-checkout quickstart](../README.md#fresh-checkout-quickstart),
 [six-scenario table](../README.md#six-offline-scenarios),
@@ -70,21 +122,20 @@ requirements remain documented in [live research](live_research.md).
 | --- | --- |
 | Local dashboard, six scenarios, citations, contradictions, retry/audit views | Automated offline/browser checks |
 | Full real-adapter five-agent orchestration | Mocked HTTP integration tests |
-| Mesh connectivity | Operator-reported HTTP 200/text connectivity; not proof of all agent contracts |
-| Planner, discovery and source retrieval | Operator-reported live run progressed through these stages to Drafter |
-| Brave connectivity | Separately passed HTTP 200 according to operator evidence; earlier timeouts are historical |
-| Historical Drafter model-ID rejection | The exact Gemini identifier pair is now supported for API 2026-08 onward under strict version/routing checks; it is no longer the current blocker |
-| Latest live attempt | Run `f1728f2859d04a00943f67187561b970`: HTTP 200, one Mesh request, zero Brave/source requests; model identity passed, but `X-Mesh-Routing-Fallback` was absent (`fallback_missing`) |
-| Drafter/Verifier live JSON contracts and final live report | Not established end to end; the latest run stopped at Planner response metadata validation, with no final report |
-| Full live research and independent semantic accuracy | Not demonstrated; no metrics claimed |
+| Complete live five-agent research | One run passed: `56943dce…`, report `verified`, 2/2 claims supported with MDN citations ([evidence](#live-run-evidence)) |
+| Live Mesh routing, model identity and agent JSON contracts | Passed on all four Mesh responses in that run under unchanged strict checks |
+| Live Brave discovery and source retrieval | Passed in that run, with DNS-over-HTTPS enabled for the session |
+| Live reliability | Not established; five earlier October 20 attempts and the older `f1728f28…` attempt failed closed at different stages |
+| Independent semantic accuracy | Not demonstrated; model-verified only, no metrics claimed |
+| Historical blockers | Model-ID mismatch, missing fallback header (`f1728f28…`), Brave DNS timeouts and the attempts in the evidence table are historical |
 | Official hackathon checker | Exact inactive template retained; not activated |
 
 Do not use fixture results as live research. A green offline test does not remove
-live-provider blockers. Live preflight can validate configuration but cannot
+live-provider risk. Live preflight can validate configuration but cannot
 authenticate a key, check account billing or establish model-ID equivalence. Use only
-the [reviewed future live commands and spending gates](live_research.md#future-powershell-commands-do-not-execute-during-preparation)
-after the missing routing metadata is resolved without weakening safeguards and
-separate live/spend authorization is obtained. Header absence does not prove
+the [reviewed live commands and spending gates](live_research.md#future-powershell-commands-do-not-execute-during-preparation)
+with separate live/spend authorization for every run, and use a distinct question
+to avoid unverifiable Mesh cache hits. Header absence does not prove
 fallback occurred. The support-confirmed Gemini equivalence does not authorize
 arbitrary aliases; see the [identity/routing policy](mesh_model_identity.md). Do not repeat successful connectivity probes automatically.
 A planner call may incur cost before a later stage fails; client bounds are not
@@ -114,7 +165,9 @@ a hard dollar ceiling on gateway work.
 - Export Markdown and confirm it retains the offline notice and citations.
 - Show a passing automated test/CI result for the exact recorded commit, while
   explaining that provider responses in integration tests are mocked.
-- State the missing routing-header blocker and unverified live stages clearly. Do not execute
+- If mentioning live results, state exactly one completed live run with two
+  model-verified claims, and that reliability and accuracy are not established.
+  Do not display private report files or credentials. Do not execute
   the live runner during recording without separate approval. If you started a
   disposable recording server, stop only that instance afterward; leave an
   existing dashboard untouched.
@@ -147,19 +200,21 @@ web findings."
 
 **Engineering/close:** "The live runner uses Mesh for every LLM request and Brave
 for discovery, with public-source retrieval, strict JSON contracts, request
-budgets and private persistent audit/report files. The operator has separately
-observed Mesh and Brave HTTP 200, and an earlier live run reached Drafter.
-Support confirmed the Gemini model-identifier equivalence. The latest attempt
-returned HTTP 200 but was rejected because X-Mesh-Routing-Fallback was absent.
-That does not prove fallback occurred. We have not completed a verified live
-report, and the official Agent Arena checker has not yet been activated.
-Offline integration tests and GitHub CI cover the orchestration with mocked
-providers; they do not establish live research accuracy."
+budgets and private persistent audit/report files. In one authorized live run,
+all five agents completed against a real MDN page: two claims about HTTP 405 and
+501 were verified with exact quotes and citations, using four Mesh requests and
+one Brave search in about 26 seconds. Earlier attempts failed safely, and each
+cause was fixed without weakening a check. One run is not a reliability or
+accuracy measure, and the official Agent Arena checker has not yet been
+activated. Offline integration tests and GitHub CI cover the orchestration with
+mocked providers."
 
 ## Completed evidence and outstanding submission items
 
 - [x] Existing public repository identified; no new repository is needed.
-- [x] Checkpoint `7a028fd` has the successful Offline CI evidence linked above.
+- [x] Checkpoint `ee50eb2` has the successful Offline CI evidence linked above.
+- [x] One bounded, authorized live five-agent run completed with report status
+  `verified` (run `56943dce…`); see [live run evidence](#live-run-evidence).
 - [x] Recorded offline workflow and six browser scenarios cover the demo behavior.
 - [x] Developer attribution and explicit offline labeling are present.
 
@@ -174,9 +229,9 @@ The following remain open; completed baseline checks do not complete these items
   retrieved during this session; do not infer them from an OIDC audience string.
 - [ ] Confirm the operator-supplied deadline: October 20, 2026 at 8:30 PM Kuwait
   time. This document records the supplied deadline, not a newly verified rule.
-- [ ] If actual live research is required for acceptance, separately authorize
-  one bounded run after the missing routing metadata, remaining agent JSON
-  contracts and spend exposure are reviewed. Never claim a run not performed.
+- [ ] If the organizer requires more live evidence than one completed run,
+  separately authorize each further bounded run with its spend. Never claim a
+  run not performed, and do not present one run as a reliability measure.
 - [ ] Review official checker activation separately. The supplied
   [official workflow URL](https://careerapi-production.krishnaik.in/api/ci/hackathons/agent-arena-2026/workflow.yml)
   was retrieved in Phase 8; the exact local template hash is
@@ -194,7 +249,7 @@ The following remain open; completed baseline checks do not complete these items
   payment, checker activation or hosting deployment is authorized by this sprint.
 
 No guaranteed hackathon eligibility or submission completeness is claimed while
-these organizer, video, checker and live-validation items remain unresolved.
+these organizer, video and checker items remain unresolved.
 
 ## Historical final-sprint local verification
 

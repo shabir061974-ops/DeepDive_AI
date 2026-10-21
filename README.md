@@ -8,33 +8,31 @@ Developed by Chabir Ahamad Abusali
 
 ## Current status
 
-Latest verified checkpoint: `7a028fd682c5c11388d7c10ca1ae471b542aa265` on
-`master`. This table supersedes the historical phase records below; it does not
-describe a completed live research run. No tests or CI were rerun for this
-documentation-only correction.
+Latest verified code checkpoint: `ee50eb28a2ce8769664a86f13ab5bad26458181a` on
+`master`. This table supersedes the historical phase records below.
 
 | Area | Evidence at this checkpoint | Status |
 | --- | --- | --- |
-| Offline workflow | Real coordinator and five agents with scripted Mesh responses and local retrieval fixtures | Verified offline only |
-| Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only |
-| Automated verification | 320 offline Python tests passed at the latest verified checkpoint; six browser scenarios passed | Recorded verification evidence, not a new test run |
-| GitHub Offline CI | [Successful run 39157978525](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39157978525) for `7a028fd` | Previously verified; this documentation edit has not run CI |
-| Live connectivity | Operator-reported Mesh HTTP 200 and separate Brave HTTP 200 | Connectivity evidence, not complete research validation |
-| Live partial workflow | Operator-reported run completed Planner, discovery and source retrieval, then reached Drafter | Does not verify later agent contracts |
-| Mesh model identity | Support confirmed the exact Gemini identifier pair for API 2026-08 onward; latest live response passed model identity validation | Strict routing validation remains required |
-| Latest live attempt | Run `f1728f2859d04a00943f67187561b970`: Mesh HTTP 200, one Mesh request, zero Brave/source requests; rejected with `fallback_missing` | `X-Mesh-Routing-Fallback` was absent; this does not prove fallback occurred |
-| Complete live research | No verified completed live five-agent report, live Verifier assessment or independently checked final live citations | Unverified |
+| Offline workflow | Real coordinator and five agents with scripted Mesh responses and local retrieval fixtures | Verified offline |
+| Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only; the dashboard remains a labeled fixture demo |
+| Automated verification | 385 offline Python tests passed at `ee50eb2`; six browser scenarios passed in CI | Verified |
+| GitHub Offline CI | [Successful run 39494702168](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39494702168) for `ee50eb2` | Verified |
+| Complete live research | **One completed live five-agent run** on October 20, 2026: run `56943dceac174beebd53e9b10573344c`, report status `verified`, 2 of 2 claims supported with exact quotes from a retrieved MDN page | Passed once; see [live run evidence](docs/submission_readiness.md#live-run-evidence) |
+| Live request use | 4 Mesh, 1 Brave and 1 source request (limits 7/2/4); 25.8 s wall time (limit 120 s); `google/gemini-2.5-flash` | Within limits; DoH enabled for that session |
+| Live cost | At most about USD 0.02, an upper bound from configured caps and operator-approved rates | Estimate only; actual billing not verified (`unknown_may_be_billable`) |
+| Live reliability and accuracy | Five earlier October 20 attempts (and an older `f1728f28…` attempt) failed closed at different stages before the fixes listed in the evidence section | **Not established**; one success is not a reliability or accuracy measure |
 | Official checker and submission | Official Agent Arena checker has not yet been activated; inactive template retained | Outstanding; Offline CI does not establish organizer acceptance |
 
-The identifier discrepancy does not establish that Mesh used a different
-underlying model or fallback. Display allowlisting remains diagnostic only.
-The [support-confirmed acceptance policy](docs/mesh_model_identity.md) allows only
-the exact pair on a confirmed supported response version, requires explicit
-no-fallback metadata, and rejects any routing-model header. The latest live
-blocker is missing fallback metadata, not the historical model-ID mismatch.
-Earlier Planner JSON-format failures and Brave timeouts are
-historical evidence, not the current blocking stage. See the [submission checklist
-and video script](docs/submission_readiness.md) and [live runner](docs/live_research.md).
+The completed run passed every existing safeguard unchanged: strict model
+identity and `X-Mesh-Routing-Fallback: false` routing checks, rejection of
+unverified cache hits, strict agent JSON and schemas, evidence-ID and exact-quote
+verification, TLS, SSRF and public-IP pinning. Its claims were judged supported
+by the live Mesh Verifier and checked programmatically as exact excerpt quotes;
+they were not independently reviewed by a person. Earlier blockers (slow server
+DNS, a Mesh cache hit, fenced agent JSON, Planner task count, claim length and a
+DoH timeout) and their fixes are recorded in the [live run evidence](docs/submission_readiness.md#live-run-evidence).
+See also the [submission checklist and video script](docs/submission_readiness.md),
+[live runner](docs/live_research.md) and [identity/routing policy](docs/mesh_model_identity.md).
 
 ## Fresh-checkout quickstart
 
@@ -96,8 +94,9 @@ assessments**, not live semantic accuracy, independent source truth, search
 quality, research completeness or organizer-checker acceptance. The scripted
 verifier deliberately proposes positive verdicts; actual production vetoes must
 reject contradictory or insufficient assessments. This cannot detect a real
-model incorrectly calling an unrelated excerpt supportive. Mesh naming now has
-support-confirmed offline compatibility; complete live validation remains outstanding.
+model incorrectly calling an unrelated excerpt supportive. One complete live
+run has since passed (see [Current status](#current-status)); it does not measure
+live reliability or semantic accuracy.
 
 | Case | Final supported/unsupported/insufficient claims | Accepted citations traceable | Unsafe acceptances | Contradiction safeguard | Retries observed/expected |
 | --- | --- | --- | --- | --- | --- |
@@ -230,6 +229,9 @@ other provider's credentials must not be treated as the current loading contract
 
 ### Historical submission status and demo
 
+*Historical record; superseded by [Current status](#current-status), including
+the first completed live run.*
+
 The five-agent pipeline is verified end to end with mocked HTTP provider
 responses, and the six-scenario dashboard remains explicitly offline. The
 published Phase 9 checkpoint `1e181bd` passed its own [Offline CI run](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/38929566748).
@@ -246,6 +248,8 @@ explain the scope and remaining uncertainty. This is offline-tested compatibilit
 not a confirmed fix for the live failure; no new provider request was made.
 
 ### Historical publication and CI readiness
+
+*Historical record from Phase 8; see [Current status](#current-status) for live results.*
 
 Phase 8 preparation starts at `4f415ac` on `master`. The application remains a
 local **OFFLINE FIXTURE DEMO — NO LIVE RESEARCH**. No complete live research run
