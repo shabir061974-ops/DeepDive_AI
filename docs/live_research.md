@@ -299,7 +299,11 @@ the official Agent Arena checker, which stays an unmodified, inactive template.
   step summary: the five agent stages, status and failure codes, request counts,
   claim text, verdicts and citation URLs. On failure it also shows the runner's
   Mesh validation sub-code, routing codes, and the last Mesh response's finish
-  reason and token counts (prompt, completion, total, reasoning when reported). Model and source text is shown only as
+  reason and token counts (prompt, completion, total, reasoning when reported),
+  plus the names of its cache/routing headers (`x-mesh*`, `*cache*`, `age`). A
+  header value is shown only if it is `true`, `false`, `hit`, `miss`, `bypass`
+  or a number of up to 10 digits, and never for identifier-like names; all
+  other values are withheld. Model and source text is shown only as
   bounded, cleaned literal code spans, so it cannot become links, images, HTML or
   mentions. Prompts, rationales, excerpts and credentials are never printed.
 - Nothing is uploaded: the private `reports/live/<run-id>/` files stay on the

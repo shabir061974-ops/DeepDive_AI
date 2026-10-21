@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import re
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Mapping
@@ -101,6 +102,47 @@ def _completion_metadata(data: dict) -> dict:
             "reasoning_tokens": _token_count(reasoning)}
 
 
+# Cache/routing header diagnostics. Names are recorded only for x-mesh*, *cache* and age;
+# values only when they are one of a few fixed words or a short number, and never for
+# identifier-like names. Nothing else from a response is retained.
+HEADER_NAME = re.compile(r"[a-z0-9-]{1,64}")
+HEADER_VALUE_WORDS = frozenset({"true", "false", "hit", "miss", "bypass"})
+HEADER_ID_TOKENS = frozenset({"id", "key", "token", "auth", "authorization", "cookie", "secret", "signature",
+                              "session", "trace", "request", "user", "account", "org", "ip", "client"})
+MAX_RECORDED_HEADERS = 24
+
+
+def _recorded_header_name(name: object) -> str | None:
+    if not isinstance(name, str):
+        return None
+    name = name.strip().lower()
+    if not HEADER_NAME.fullmatch(name):
+        return None
+    return name if name.startswith("x-mesh") or "cache" in name or name == "age" else None
+
+
+def _recorded_header_value(name: str, value: object) -> str | None:
+    if set(name.split("-")) & HEADER_ID_TOKENS or not isinstance(value, str):
+        return None
+    value = value.strip().lower()
+    if value in HEADER_VALUE_WORDS or (value.isascii() and value.isdecimal() and len(value) <= 10):
+        return value
+    return None
+
+
+def _header_diagnostics(headers: object) -> list[dict]:
+    recorded = []
+    for item in headers if isinstance(headers, (list, tuple)) else ():
+        if not (isinstance(item, (list, tuple)) and len(item) == 2):
+            continue
+        name = _recorded_header_name(item[0])
+        if name is not None:
+            recorded.append({"name": name, "value": _recorded_header_value(name, item[1])})
+            if len(recorded) == MAX_RECORDED_HEADERS:
+                break
+    return recorded
+
+
 class ObservedTransport:
     """Safe counters/diagnostics only. Does not retain requests, headers or bodies."""
 
@@ -113,6 +155,8 @@ class ObservedTransport:
         self.failure: dict | None = None
         # Finish reason and token counts of the most recent Mesh 200 response, if parseable.
         self.last_completion: dict | None = None
+        # Allowlisted cache/routing header names and values of the most recent Mesh response.
+        self.last_headers: list[dict] | None = None
 
     def _record_failure(self, details: dict, hostname: str | None) -> None:
         self.failure = details
@@ -139,6 +183,8 @@ class ObservedTransport:
                 pass
         try:
             response = await self.transport.send(request)
+            if self.model is not None:
+                self.last_headers = _header_diagnostics(response.headers)
             if response.status >= 400:
                 self._record_failure({"category": status_category(response.status).value,
                                       "stage": None, "http_status": response.status}, hostname)
@@ -319,6 +365,8 @@ async def run_live(
         mesh_observer = observers.get("mesh")
         if mesh_observer is not None and mesh_observer.last_completion is not None:
             result["mesh_last_completion"] = dict(mesh_observer.last_completion)
+        if mesh_observer is not None and mesh_observer.last_headers is not None:
+            result["mesh_last_headers"] = [dict(item) for item in mesh_observer.last_headers]
         if details is not None:
             result["failure_details"] = details
             for observer in observers.values():

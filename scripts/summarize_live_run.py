@@ -67,6 +67,12 @@ MESH_CLASSIFICATIONS = frozenset({"normal_non_streaming", "cached_response", "un
                                   "unknown_response", "invalid_metadata"})
 FINISH_REASON_LABELS = frozenset({"stop", "length", "content_filter", "tool_calls", "function_call", "other", "missing"})
 TOKEN_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens")
+# Same rules as deepdive_ai.live header diagnostics, re-applied here.
+HEADER_NAME = re.compile(r"[a-z0-9-]{1,64}")
+HEADER_VALUE_WORDS = frozenset({"true", "false", "hit", "miss", "bypass"})
+HEADER_ID_TOKENS = frozenset({"id", "key", "token", "auth", "authorization", "cookie", "secret", "signature",
+                              "session", "trace", "request", "user", "account", "org", "ip", "client"})
+MAX_RECORDED_HEADERS = 24
 MAX_TOKEN_COUNT = 1_000_000_000
 # deepdive_ai.agents.common AgentFailureLocation / AgentValueShape values.
 FAILURE_LOCATIONS = frozenset({"whole_reply", "claim_row"})
@@ -191,9 +197,29 @@ def mesh_detail_rows(result: dict) -> list[str]:
         rows.append(f"| Last finish reason | {allowed(last.get('finish_reason'), FINISH_REASON_LABELS)} |")
         for name in TOKEN_FIELDS:
             rows.append(f"| Last {name.replace('_', ' ')} | {token_count(last.get(name))} |")
-    if not rows:
+    lines = ["", "### Mesh response details", "", "| Field | Value |", "| --- | --- |"] + rows if rows else []
+    return lines + header_rows(result.get("mesh_last_headers"))
+
+
+def header_rows(headers: object) -> list[str]:
+    """Cache/routing header names and allowlisted values of the last Mesh response."""
+    if not isinstance(headers, list):
         return []
-    return ["", "### Mesh response details", "", "| Field | Value |", "| --- | --- |"] + rows
+    rows = []
+    for item in headers[:MAX_RECORDED_HEADERS]:
+        name = item.get("name") if isinstance(item, dict) else None
+        if not (isinstance(name, str) and HEADER_NAME.fullmatch(name)
+                and (name.startswith("x-mesh") or "cache" in name or name == "age")):
+            rows.append("| invalid | withheld |")
+            continue
+        value = item.get("value")
+        shown = (value if isinstance(value, str) and not set(name.split("-")) & HEADER_ID_TOKENS
+                 and (value in HEADER_VALUE_WORDS or (value.isascii() and value.isdecimal() and len(value) <= 10))
+                 else "withheld")
+        rows.append(f"| {name} | {shown} |")
+    if not rows:
+        return ["", "### Mesh response headers", "", "No cache or routing headers were present."]
+    return ["", "### Mesh response headers", "", "| Header | Value |", "| --- | --- |"] + rows
 
 
 def load_json(path: Path | None) -> object:
