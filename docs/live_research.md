@@ -297,7 +297,9 @@ the official Agent Arena checker, which stays an unmodified, inactive template.
   scripts only through environment variables.
 - [`scripts/summarize_live_run.py`](../scripts/summarize_live_run.py) writes the
   step summary: the five agent stages, status and failure codes, request counts,
-  claim text, verdicts and citation URLs. Model and source text is shown only as
+  claim text, verdicts and citation URLs. On failure it also shows the runner's
+  Mesh validation sub-code, routing codes, and the last Mesh response's finish
+  reason and token counts (prompt, completion, total, reasoning when reported). Model and source text is shown only as
   bounded, cleaned literal code spans, so it cannot become links, images, HTML or
   mentions. Prompts, rationales, excerpts and credentials are never printed.
 - Nothing is uploaded: the private `reports/live/<run-id>/` files stay on the

@@ -73,6 +73,34 @@ def policy(timeout: int, requests: int, response_bytes: int) -> RequestPolicy:
                          max_concurrency=1, max_request_bytes=24_000, max_response_bytes=response_bytes)
 
 
+# Runner checks on every Mesh 200 response, in evaluation order; the first that fails is
+# recorded as `mesh_validation_failure`.
+MESH_VALIDATION_CHECKS = ("response_json_valid", "root_object", "model_matches", "routing_metadata_valid",
+                          "usage_object", "token_fields_valid", "token_total_matches", "output_limit_satisfied")
+MESH_FINISH_REASONS = frozenset({"stop", "length", "content_filter", "tool_calls", "function_call"})
+MAX_TOKEN_COUNT = 1_000_000_000
+
+
+def _token_count(value: object) -> int | None:
+    return value if type(value) is int and 0 <= value <= MAX_TOKEN_COUNT else None
+
+
+def _completion_metadata(data: dict) -> dict:
+    """Fixed finish-reason label and bounded token counts only; never message content."""
+    choices = data.get("choices")
+    finish = (choices[0].get("finish_reason")
+              if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None)
+    usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    details = usage.get("completion_tokens_details")
+    reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else usage.get("reasoning_tokens")
+    return {"finish_reason": "missing" if finish is None else finish if isinstance(finish, str)
+            and finish in MESH_FINISH_REASONS else "other",
+            "prompt_tokens": _token_count(usage.get("prompt_tokens")),
+            "completion_tokens": _token_count(usage.get("completion_tokens")),
+            "total_tokens": _token_count(usage.get("total_tokens")),
+            "reasoning_tokens": _token_count(reasoning)}
+
+
 class ObservedTransport:
     """Safe counters/diagnostics only. Does not retain requests, headers or bodies."""
 
@@ -83,6 +111,8 @@ class ObservedTransport:
         self.source_diagnostics = source_diagnostics
         self.attempts = 0
         self.failure: dict | None = None
+        # Finish reason and token counts of the most recent Mesh 200 response, if parseable.
+        self.last_completion: dict | None = None
 
     def _record_failure(self, details: dict, hostname: str | None) -> None:
         self.failure = details
@@ -113,12 +143,12 @@ class ObservedTransport:
                 self._record_failure({"category": status_category(response.status).value,
                                       "stage": None, "http_status": response.status}, hostname)
             if self.model is not None and response.status == 200:
+                self.last_completion = None
                 classification = classify_mesh_response(response).classification
                 routing_codes = mesh_routing_rejection_codes(response)
                 # The Mesh client independently validates strict JSON/completion shape.
                 # This runner additionally requires the selected model and bounded usage.
-                validation_checks = dict.fromkeys(("response_json_valid", "root_object", "model_matches", "routing_metadata_valid",
-                    "usage_object", "token_fields_valid", "token_total_matches", "output_limit_satisfied"), False)
+                validation_checks = dict.fromkeys(MESH_VALIDATION_CHECKS, False)
                 model_diagnostics = {"model_field_present": False, "model_field_type": "unavailable",
                                      "public_model_identifier": None}
                 try:
@@ -127,6 +157,7 @@ class ObservedTransport:
                     validation_checks["root_object"] = isinstance(data, dict)
                     if not isinstance(data, dict):
                         raise ValueError
+                    self.last_completion = _completion_metadata(data)
                     model_diagnostics = _model_identity_diagnostics(data)
                     validation_checks.update(mesh_identity_checks(response, self.model, data.get("model")))
                     usage = data.get("usage")
@@ -153,6 +184,8 @@ class ObservedTransport:
             if error.category == FailureCategory.VALIDATION and validation_checks is not None:
                 self.failure["mesh_response_classification"] = classification
                 self.failure["mesh_validation_checks"] = validation_checks
+                self.failure["mesh_validation_failure"] = next(
+                    (name for name in MESH_VALIDATION_CHECKS if not validation_checks[name]), None)
                 self.failure.update(model_diagnostics)
                 if routing_codes:
                     self.failure["routing_rejection_codes"] = list(routing_codes)
@@ -283,6 +316,9 @@ async def run_live(
         result["failure_category"] = ("agent_contract_failure" if isinstance(error, AgentOutputError) else
                                       "timeout" if isinstance(error, TimeoutError) else
                                       details["category"] if details else "workflow_or_storage_failure")
+        mesh_observer = observers.get("mesh")
+        if mesh_observer is not None and mesh_observer.last_completion is not None:
+            result["mesh_last_completion"] = dict(mesh_observer.last_completion)
         if details is not None:
             result["failure_details"] = details
             for observer in observers.values():

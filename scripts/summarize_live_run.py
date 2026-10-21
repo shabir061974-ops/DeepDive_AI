@@ -54,6 +54,20 @@ MESH_COMPLETION_CHECKS = frozenset({
     "unsupported_content_type", "envelope_invalid", "choices_invalid", "finish_reason_length",
     "finish_reason_content_filter", "finish_reason_tool_calls", "finish_reason_other", "finish_reason_missing",
     "message_invalid", "tool_calls_present", "content_not_text", "content_empty"})
+# deepdive_ai.live MESH_VALIDATION_CHECKS, deepdive_ai.audit RoutingRejectionCode and
+# MeshResponseClassification values, and the runner's fixed finish-reason labels.
+MESH_VALIDATION_CHECKS = frozenset({
+    "response_json_valid", "root_object", "model_matches", "routing_metadata_valid", "usage_object",
+    "token_fields_valid", "token_total_matches", "output_limit_satisfied"})
+ROUTING_REJECTION_CODES = frozenset({
+    "fallback_missing", "fallback_true", "fallback_invalid", "routing_model_present", "duplicate_metadata",
+    "invalid_version", "invalid_attempts", "invalid_metadata_value", "cached_response_unverified",
+    "unexpected_streaming", "invalid_cache_metadata", "contradictory_metadata"})
+MESH_CLASSIFICATIONS = frozenset({"normal_non_streaming", "cached_response", "unexpected_streaming",
+                                  "unknown_response", "invalid_metadata"})
+FINISH_REASON_LABELS = frozenset({"stop", "length", "content_filter", "tool_calls", "function_call", "other", "missing"})
+TOKEN_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens")
+MAX_TOKEN_COUNT = 1_000_000_000
 # deepdive_ai.agents.common AgentFailureLocation / AgentValueShape values.
 FAILURE_LOCATIONS = frozenset({"whole_reply", "claim_row"})
 VALUE_SHAPES = frozenset({"object", "array", "string", "number", "boolean", "null"})
@@ -148,7 +162,38 @@ def diagnostic_rows(result: dict) -> list[str]:
     if rows:
         lines += ["", "### Provider diagnostics", "", "| Provider | Category | Stage | HTTP status | Source host |",
                   "| --- | --- | --- | --- | --- |"] + rows
-    return lines
+    return lines + mesh_detail_rows(result)
+
+
+def token_count(value: object) -> str:
+    if value is None:
+        return "none"
+    return str(value) if type(value) is int and 0 <= value <= MAX_TOKEN_COUNT else "invalid"
+
+
+def mesh_detail_rows(result: dict) -> list[str]:
+    """Runner validation sub-code, routing codes and last Mesh finish reason/token counts."""
+    rows = []
+    diagnostics = result.get("diagnostics")
+    mesh = diagnostics.get("mesh") if isinstance(diagnostics, dict) else None
+    if isinstance(mesh, dict):
+        if "mesh_validation_failure" in mesh:
+            rows.append(f"| Validation failure | {allowed(mesh.get('mesh_validation_failure'), MESH_VALIDATION_CHECKS)} |")
+        codes = mesh.get("routing_rejection_codes")
+        if isinstance(codes, list) and codes:
+            rows.append("| Routing rejection codes | "
+                        + ", ".join(allowed(item, ROUTING_REJECTION_CODES) for item in codes[:12]) + " |")
+        if "mesh_response_classification" in mesh:
+            rows.append(f"| Response classification | "
+                        f"{allowed(mesh.get('mesh_response_classification'), MESH_CLASSIFICATIONS)} |")
+    last = result.get("mesh_last_completion")
+    if isinstance(last, dict):
+        rows.append(f"| Last finish reason | {allowed(last.get('finish_reason'), FINISH_REASON_LABELS)} |")
+        for name in TOKEN_FIELDS:
+            rows.append(f"| Last {name.replace('_', ' ')} | {token_count(last.get(name))} |")
+    if not rows:
+        return []
+    return ["", "### Mesh response details", "", "| Field | Value |", "| --- | --- |"] + rows
 
 
 def load_json(path: Path | None) -> object:
