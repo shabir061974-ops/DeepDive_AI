@@ -1,8 +1,10 @@
 """Write a sanitized GitHub Step Summary for one `deepdive_ai.live` run.
 
 Reads only the CLI's JSON output and that run's own `audit.jsonl` and
-`report.json`. Prints fixed codes, counts, claim text, verdicts and citation
-URLs; never prompts, raw model output, rationales, excerpts or credentials.
+`report.json`. Prints fixed codes, counts, allowlisted failure diagnostics
+(category, transport stage, HTTP status, validated source hostname), claim text,
+verdicts and citation URLs; never prompts, raw model output, raw exceptions,
+rationales, excerpts or credentials.
 Model and source text is untrusted: it is cleaned, bounded and rendered only
 inside literal code spans, so it cannot form Markdown, HTML, links, images,
 mentions or autolinks. Missing or malformed files never raise.
@@ -13,6 +15,7 @@ Usage:
 """
 
 import argparse
+import ipaddress
 import json
 import re
 import sys
@@ -35,6 +38,16 @@ STAGES = (("Planner", "planned"), ("Researcher", "researched"), ("Drafter", "dra
           ("Verifier", "verified"), ("Synthesizer", "completed"))
 LIMITS = {"mesh": 7, "brave": 2, "source": 4}
 UNSAFE_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}
+# Fixed values written by deepdive_ai.http_transport / deepdive_ai.live diagnostics.
+FAILURE_CATEGORIES = frozenset({
+    "dns_failure", "tls_failure", "network_failure", "timeout", "unsafe_destination", "response_too_large",
+    "unsupported_encoding", "http_protocol_failure", "incomplete_response", "request_limit",
+    "authentication_http_status", "rate_limited", "billing_http_status", "redirect_rejected",
+    "provider_http_status", "unexpected_http_status", "response_parsing", "response_validation",
+    "internal_error", "request_cancelled"})
+TRANSPORT_STAGES = frozenset({"worker_queue", "dns", "tcp_connect", "tls_handshake", "send_request",
+                              "response_headers", "response_body"})
+HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 
 
 def text(value: object, limit: int = MAX_TEXT_CHARS) -> str:
@@ -71,6 +84,58 @@ def url(value: object) -> str:
     if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password:
         return "(invalid URL)"
     return text(value, MAX_URL_CHARS)
+
+
+def allowed(value: object, values: frozenset[str]) -> str:
+    if value is None:
+        return "none"
+    return value if isinstance(value, str) and value in values else "invalid"
+
+
+def http_status(value: object) -> str:
+    if value is None:
+        return "none"
+    return str(value) if type(value) is int and 100 <= value <= 599 else "invalid"
+
+
+def hostname(value: object) -> str:
+    """A validated public-looking hostname or IP literal as inert text; never a URL."""
+    if not isinstance(value, str) or not 0 < len(value) <= 253:
+        return "none" if value is None else "invalid"
+    try:
+        ipaddress.ip_address(value)
+        return text(value, 253)
+    except ValueError:
+        pass
+    labels = value.split(".")
+    if len(labels) < 2 or not all(HOST_LABEL.fullmatch(label) for label in labels):
+        return "invalid"
+    return text(value, 253)
+
+
+def diagnostic_rows(result: dict) -> list[str]:
+    lines = []
+    details = result.get("failure_details")
+    if isinstance(details, dict):
+        lines += ["", "### Failure details", "", "| Field | Value |", "| --- | --- |",
+                  f"| Category | {allowed(details.get('category'), FAILURE_CATEGORIES)} |",
+                  f"| Stage | {allowed(details.get('stage'), TRANSPORT_STAGES)} |",
+                  f"| HTTP status | {http_status(details.get('http_status'))} |"]
+    diagnostics = result.get("diagnostics")
+    rows = []
+    if isinstance(diagnostics, dict):
+        for provider in LIMITS:
+            item = diagnostics.get(provider)
+            if not isinstance(item, dict):
+                continue
+            host = hostname(item.get("source_hostname")) if provider == "source" else "&#8212;"
+            rows.append(f"| {provider.capitalize()} | {allowed(item.get('category'), FAILURE_CATEGORIES)} | "
+                        f"{allowed(item.get('stage'), TRANSPORT_STAGES)} | {http_status(item.get('http_status'))} | "
+                        f"{host} |")
+    if rows:
+        lines += ["", "### Provider diagnostics", "", "| Provider | Category | Stage | HTTP status | Source host |",
+                  "| --- | --- | --- | --- | --- |"] + rows
+    return lines
 
 
 def load_json(path: Path | None) -> object:
@@ -184,6 +249,7 @@ def build(preflight: object, outcome: object, reports_root: Path) -> str:
     for provider, limit in LIMITS.items():
         used = attempts.get(provider)
         lines.append(f"| {provider.capitalize()} | {used if type(used) is int and 0 <= used <= 1000 else 0} | {limit} |")
+    lines += diagnostic_rows(result)
     if run_id is None:
         lines += ["", "No live execution was recorded, so no agent stages ran."]
         return "\n".join(lines) + "\n"

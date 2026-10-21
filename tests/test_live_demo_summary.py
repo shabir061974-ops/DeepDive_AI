@@ -221,6 +221,120 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summary.main(["--summary-file", str(fixture.dir / "missing-dir" / "s.md")]), 1)
 
 
+def failed_outcome(diagnostics=None, details=None):
+    return outcome(status="failed", report_status=None, failure_category="network_failure",
+                   failure_details={"category": "network_failure", "stage": "tcp_connect", "http_status": None}
+                   if details is None else details,
+                   diagnostics={"source": {"category": "network_failure", "stage": "tcp_connect", "http_status": None,
+                                           "source_hostname": "developer.mozilla.org"}}
+                   if diagnostics is None else diagnostics,
+                   attempts={"mesh": 1, "brave": 1, "source": 1})
+
+
+class DiagnosticTests(unittest.TestCase):
+    def build(self, result):
+        fixture = Fixture(self)
+        fixture.run_files(["started", "planned", "failed"])
+        return fixture.build(None, result)
+
+    def test_failure_stage_status_and_validated_source_host_are_shown(self):
+        text = self.build(failed_outcome())
+        self.assertIn("### Failure details", text)
+        self.assertIn("| Category | network_failure |", text)
+        self.assertIn("| Stage | tcp_connect |", text)
+        self.assertIn("| HTTP status | none |", text)
+        self.assertIn("| Source | network_failure | tcp_connect | none | ` developer.mozilla.org ` |", text)
+        self.assertIn(f"| Researcher | {CROSS} failed or stopped here |", text)
+
+    def test_http_status_and_ip_literal_hosts(self):
+        text = self.build(failed_outcome(
+            details={"category": "provider_http_status", "stage": None, "http_status": 503},
+            diagnostics={"mesh": {"category": "response_validation", "stage": None, "http_status": 200},
+                         "source": {"category": "rate_limited", "stage": "response_headers", "http_status": 429,
+                                    "source_hostname": "2a04:4e42::347"}}))
+        self.assertIn("| HTTP status | 503 |", text)
+        self.assertIn("| Mesh | response_validation | none | 200 | &#8212; |", text)
+        self.assertIn("| Source | rate_limited | response_headers | 429 | ` 2a04:4e42::347 ` |", text)
+
+    def test_successful_run_has_no_diagnostic_sections(self):
+        fixture = Fixture(self)
+        fixture.run_files(COMPLETE, report())
+        text = fixture.build(None, outcome())
+        self.assertNotIn("Failure details", text)
+        self.assertNotIn("Provider diagnostics", text)
+
+    def test_missing_or_malformed_fields_never_crash(self):
+        cases = (
+            {"diagnostics": None, "failure_details": None},
+            {"diagnostics": [], "failure_details": []},
+            {"diagnostics": {"source": "x", "mesh": None, "brave": []}, "failure_details": "x"},
+            {"diagnostics": {"source": {}}, "failure_details": {}},
+            {"diagnostics": {"source": {"category": ["x"], "stage": {"a": 1}, "http_status": True,
+                                        "source_hostname": ["developer.mozilla.org"]}}},
+            {"diagnostics": {"source": {"http_status": "404"}, "unknown": {"category": "timeout"}}},
+            {"diagnostics": {"source": {"http_status": 99}}, "failure_details": {"http_status": 600}},
+            {"diagnostics": {"source": {"http_status": float("nan")}}},
+        )
+        for changes in cases:
+            with self.subTest(changes=str(changes)[:60]):
+                result = failed_outcome()
+                for key, value in changes.items():
+                    if value is None:
+                        result.pop(key, None)
+                    else:
+                        result[key] = value
+                text = self.build(result)
+                self.assertIn("### Agent stages", text)
+                self.assertNotIn("Unknown", text)
+        text = self.build(failed_outcome(diagnostics={"source": {"category": ["x"], "stage": {"a": 1},
+                                                                 "http_status": True, "source_hostname": 5}}))
+        self.assertIn("| Source | invalid | invalid | invalid | invalid |", text)
+        self.assertNotIn("Unknown", self.build(failed_outcome(diagnostics={"unknown": {"category": "timeout"}})))
+
+    def test_unlisted_values_and_malicious_strings_are_rejected(self):
+        hostile = "[x](https://evil.example)<img src=x>`\n@octocat"
+        text = self.build(failed_outcome(
+            details={"category": hostile, "stage": "Traceback (most recent call last)", "http_status": hostile},
+            diagnostics={"source": {"category": "connection reset by peer", "stage": hostile, "http_status": -1,
+                                    "source_hostname": hostile},
+                         "mesh": {"category": "timeout", "stage": "tcp_connect", "http_status": None,
+                                  "public_model_identifier": hostile, "mesh_validation_checks": {hostile: True},
+                                  "routing_rejection_codes": [hostile], "error": "Traceback " + hostile}}))
+        for raw in ("evil.example", "<img", "@octocat", "Traceback", "connection reset", "[x]"):
+            self.assertNotIn(raw, text)
+        self.assertIn("| Category | invalid |", text)
+        self.assertIn("| Source | invalid | invalid | invalid | invalid |", text)
+        self.assertIn("| Mesh | timeout | tcp_connect | none | &#8212; |", text)
+
+    def test_hostname_validation(self):
+        for good in ("developer.mozilla.org", "a.b", "x-1.example.com", "93.184.216.34", "2a04:4e42::347"):
+            with self.subTest(good=good):
+                self.assertEqual(summary.hostname(good), f"` {good} `")
+        for bad in ("https://developer.mozilla.org", "developer.mozilla.org/path", "evil.example:443", "a..b",
+                    "-a.example", "a-.example", "EVIL.EXAMPLE", "localhost", "", "a." + "b" * 64,
+                    ("a" * 63 + ".") * 4 + "com", "exa mple.com", "ex`ample.com", "xn--‮.com", 5, [], True):
+            with self.subTest(bad=str(bad)[:30]):
+                self.assertEqual(summary.hostname(bad), "invalid")
+        self.assertEqual(summary.hostname(None), "none")
+
+    def test_allowlists_match_application_enums(self):
+        from deepdive_ai.http_transport import FailureCategory, TransportStage
+        self.assertEqual(summary.FAILURE_CATEGORIES, {c.value for c in FailureCategory} | {"request_cancelled"})
+        self.assertEqual(summary.TRANSPORT_STAGES, {s.value for s in TransportStage})
+
+    def test_diagnostics_stay_bounded(self):
+        diagnostics = {f"p{i}": {"category": "timeout"} for i in range(500)}
+        diagnostics["source"] = {"category": "timeout", "source_hostname": ("a" * 63 + ".") * 3 + "com"}
+        text = self.build(failed_outcome(diagnostics=diagnostics))
+        self.assertEqual(text.count("| Source | timeout"), 1)
+        for unknown in ("| P0 ", "| P499 ", "p0", "p499"):
+            self.assertNotIn(unknown, text)
+        section = text.split("### Provider diagnostics", 1)[1].split("###", 1)[0]
+        self.assertEqual([l for l in section.splitlines() if l.startswith("| ") and "---" not in l][1:],
+                         [l for l in section.splitlines() if l.startswith("| Source |")])
+        self.assertLess(len(text), 5_000)
+
+
 class WorkflowGuardTests(unittest.TestCase):
     workflow = (ROOT / ".github" / "workflows" / "live-demo.yml").read_text(encoding="utf-8")
 
