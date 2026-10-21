@@ -2,7 +2,7 @@ import json
 from typing import Protocol
 
 from ..models import Claim, ResearchBundle, VerificationResult, VerificationStatus, records
-from .common import AgentOutputError, MeshJSON, bounded_list, object_fields, text
+from .common import AgentFailureCode, AgentOutputError, MeshJSON, bounded_list, object_fields, text
 from .drafter import check_bundle, evidence_payload
 
 
@@ -57,31 +57,51 @@ class MeshVerifierAgent:
                 {"claim": {"id": claim.id, "text": claim.text, "evidence_ids": claim.evidence_ids},
                  "evidence": evidence_payload(bundle)},
                 allow_markdown_fence=True), {"claim_id", "verdict", "rationale", "assessments"})
-            if (result["claim_id"] != claim.id or not isinstance(result["verdict"], str)
-                    or result["verdict"] not in {status.value for status in VerificationStatus}):
-                raise AgentOutputError("Verifier returned an invalid claim or verdict")
+            # Same checks in the same order as before; combined conditions are split only so
+            # that each rejection carries its own fixed diagnostic code.
+            if result["claim_id"] != claim.id:
+                raise AgentOutputError("Verifier returned an invalid claim or verdict",
+                                       code=AgentFailureCode.VERIFIER_CLAIM_ID_MISMATCH)
+            if not isinstance(result["verdict"], str) or result["verdict"] not in {status.value for status in VerificationStatus}:
+                raise AgentOutputError("Verifier returned an invalid claim or verdict",
+                                       code=AgentFailureCode.VERIFIER_INVALID_VERDICT)
             text(result["rationale"], limits.max_text_chars)
             rows = bounded_list(result["assessments"], limits.max_evidence)
             assessed: dict[str, str] = {}
             for row in rows:
                 row = object_fields(row, {"evidence_id", "relation", "quote", "rationale"})
                 evidence_id = row["evidence_id"]
-                if not isinstance(evidence_id, str) or evidence_id not in known or evidence_id in assessed:
-                    raise AgentOutputError("Verifier returned unknown or duplicate evidence assessments")
+                if not isinstance(evidence_id, str):
+                    raise AgentOutputError("Verifier returned unknown or duplicate evidence assessments",
+                                           code=AgentFailureCode.VERIFIER_EVIDENCE_ID_INVALID)
+                if evidence_id not in known:
+                    raise AgentOutputError("Verifier returned unknown or duplicate evidence assessments",
+                                           code=AgentFailureCode.VERIFIER_EVIDENCE_ID_UNKNOWN)
+                if evidence_id in assessed:
+                    raise AgentOutputError("Verifier returned unknown or duplicate evidence assessments",
+                                           code=AgentFailureCode.VERIFIER_EVIDENCE_ID_DUPLICATE)
                 relation = row["relation"]
                 if not isinstance(relation, str) or relation not in {"supports", "contradicts", "irrelevant", "insufficient"}:
-                    raise AgentOutputError("Verifier returned an invalid evidence relation")
+                    raise AgentOutputError("Verifier returned an invalid evidence relation",
+                                           code=AgentFailureCode.VERIFIER_INVALID_RELATION)
                 quote = row["quote"]
-                if not isinstance(quote, str) or len(quote) > limits.max_text_chars:
-                    raise AgentOutputError("Verifier quote is invalid or too long")
+                if not isinstance(quote, str):
+                    raise AgentOutputError("Verifier quote is invalid or too long",
+                                           code=AgentFailureCode.VERIFIER_QUOTE_INVALID)
+                if len(quote) > limits.max_text_chars:
+                    raise AgentOutputError("Verifier quote is invalid or too long",
+                                           code=AgentFailureCode.VERIFIER_QUOTE_TOO_LONG)
                 if relation in {"supports", "contradicts"} and not quote.strip():
-                    raise AgentOutputError("Semantic support/contradiction requires an exact quote")
+                    raise AgentOutputError("Semantic support/contradiction requires an exact quote",
+                                           code=AgentFailureCode.VERIFIER_QUOTE_MISSING)
                 if quote and quote not in known[evidence_id].excerpt:
-                    raise AgentOutputError("Verifier quoted text outside retrieved evidence")
+                    raise AgentOutputError("Verifier quoted text outside retrieved evidence",
+                                           code=AgentFailureCode.VERIFIER_QUOTE_NOT_IN_EVIDENCE)
                 text(row["rationale"], limits.max_text_chars)
                 assessed[evidence_id] = relation
             if set(assessed) != set(known):
-                raise AgentOutputError("Verifier must assess all supplied evidence")
+                raise AgentOutputError("Verifier must assess all supplied evidence",
+                                       code=AgentFailureCode.VERIFIER_INCOMPLETE_ASSESSMENT)
             supporting = tuple(eid for eid in claim.evidence_ids if assessed[eid] == "supports")
             contradictions = tuple(eid for eid, relation in assessed.items() if relation == "contradicts")
             verdict = VerificationStatus(result["verdict"])

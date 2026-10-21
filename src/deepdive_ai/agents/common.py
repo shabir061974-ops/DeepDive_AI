@@ -30,6 +30,17 @@ class AgentFailureCode(StrEnum):
     MALFORMED_JSON = "malformed_agent_json"
     EMPTY_TASKS = "empty_planner_tasks"
     DUPLICATE_TASKS = "duplicate_planner_tasks"
+    VERIFIER_CLAIM_ID_MISMATCH = "verifier_claim_id_mismatch"
+    VERIFIER_INVALID_VERDICT = "verifier_invalid_verdict"
+    VERIFIER_EVIDENCE_ID_INVALID = "verifier_evidence_id_invalid"
+    VERIFIER_EVIDENCE_ID_UNKNOWN = "verifier_evidence_id_unknown"
+    VERIFIER_EVIDENCE_ID_DUPLICATE = "verifier_evidence_id_duplicate"
+    VERIFIER_INVALID_RELATION = "verifier_invalid_relation"
+    VERIFIER_QUOTE_INVALID = "verifier_quote_invalid"
+    VERIFIER_QUOTE_TOO_LONG = "verifier_quote_too_long"
+    VERIFIER_QUOTE_MISSING = "verifier_quote_missing"
+    VERIFIER_QUOTE_NOT_IN_EVIDENCE = "verifier_quote_not_in_evidence"
+    VERIFIER_INCOMPLETE_ASSESSMENT = "verifier_incomplete_assessment"
 
 
 class AgentJSONShape(StrEnum):
