@@ -315,11 +315,11 @@ The following remain open; completed baseline checks do not complete these items
 - [ ] Confirm the actual organizer submission portal, form fields, video duration,
   required attachments and eligibility rules. These were not independently
   retrieved during this session; do not infer them from an OIDC audience string.
-- [ ] **Outdated:** the operator-supplied deadline recorded earlier was October 20,
-  2026 at 8:30 PM Kuwait time, which has already passed. Do not assume the
-  submission is still open: confirm the current deadline, any extension and whether
-  late entries are accepted directly with the organizer. This document does not
-  verify any deadline.
+- [ ] **Submission deadline (corrected):** October 30, 2026, 11:00 PM IST, which is
+  October 30, 2026, 8:30 PM Kuwait time. This replaces the earlier October 20
+  date recorded here, which was wrong. The date was read from the organizer's
+  public Agent Arena 2026 page on October 22, 2026; re-confirm it on the
+  organizer's page or dashboard before relying on it.
 - [ ] If the organizer requires more live evidence than one completed run,
   separately authorize each further bounded run with its spend. Never claim a
   run not performed, and do not present one run as a reliability measure.

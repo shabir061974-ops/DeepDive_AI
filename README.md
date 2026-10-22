@@ -6,6 +6,8 @@ Agent Arena 2026, Track 01: DeepDive — Self-Verifying Research Analyst.
 
 Developed by Chabir Ahamad Abusali
 
+Copyright © 2026 Chabir Ahamad Abusali. All rights reserved.
+
 ## Current status
 
 Latest verified code checkpoint: `28339c11289c88be3bc448ab0578a3819dde9b06` on
