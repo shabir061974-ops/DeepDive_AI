@@ -23,7 +23,8 @@ Latest verified code checkpoint: `28339c11289c88be3bc448ab0578a3819dde9b06` on
 | Earlier live research (local) | One completed local run on October 20, 2026 at `ee50eb2` (`56943dceac174beebd53e9b10573344c`, HTTP 405/501 question) | Passed once; see [live run evidence](docs/submission_readiness.md#live-run-evidence) |
 | Live cost | Each run is bounded at about USD 0.04 (GitHub profile) by configured caps and operator-approved rates | Estimate only; actual provider billing **not verified** |
 | Live reliability and accuracy | Nine GitHub live-demo runs on October 21, 2026 (all before `28339c1`), five earlier local attempts and an older `f1728f28…` attempt failed closed before these successes | **Not established**; two successful runs are not a reliability or accuracy measure |
-| Official checker and submission | Official Agent Arena checker has not yet been activated; inactive template retained | Outstanding; Offline CI does not establish organizer acceptance |
+| Official Agent Arena checker | Activated at commit `0b3c253` as [`agent-arena-2026-checks.yml`](.github/workflows/agent-arena-2026-checks.yml), an unchanged copy of the organizer's workflow. [First run 39809709272](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39809709272): 3 of 4 critical checks passed (code compiles, Mesh API referenced, Mesh key valid); the requirements check failed because no LLM client was declared, and the organizer recorded no result because no entry had been submitted yet. The optional [Mesh SDK diagnostic](#optional-mesh-sdk-diagnostic) was added in response; a new checker run is still needed | Not yet passing; acceptance is decided by the organizer, not by Offline CI |
+| Demo video | [YouTube: youtu.be/84Fua4MaO-0](https://youtu.be/84Fua4MaO-0) (published by the repository owner; not re-reviewed in this update) | Optional for the organizer; offline dashboard and live-run segments are labeled separately |
 
 The completed runs passed every existing safeguard unchanged: strict model
 identity and `X-Mesh-Routing-Fallback: false` routing checks, rejection of
@@ -215,11 +216,14 @@ the backend extra and runs offline Python tests, compilation, JavaScript syntax
 and installed-Chrome smoke checks without provider credentials. Dependency
 installation needs package-index access; offline tests are not live validation.
 
-The official template remains **inactive** at
-[docs/agent-arena-workflow.yml.template](docs/agent-arena-workflow.yml.template).
-It involves submission/provider credentials, OIDC and protected downloaded code.
-Do not activate it without separate review/authorization. Current organizer
-requirements and submission acceptance are not established by Offline CI.
+The official checker is active as
+[.github/workflows/agent-arena-2026-checks.yml](.github/workflows/agent-arena-2026-checks.yml),
+an unchanged copy of [docs/agent-arena-workflow.yml.template](docs/agent-arena-workflow.yml.template).
+It runs on every push, uses OIDC and the `SUBMISSION_TOKEN` and `MESH_API_KEY`
+repository secrets (a dedicated, spending-limited checker key), and downloads the
+organizer's `checks.py` at run time, which this repository cannot review. It is
+separate from Offline CI, which receives no secrets. Organizer acceptance is not
+established by Offline CI.
 No license is added; organizer and licensing requirements need confirmation.
 
 ## Historical phase records
@@ -269,7 +273,7 @@ run before being described as verified.
 Package installation downloads dependencies; the test workload is offline.
 
 The exact official hackathon workflow was retrieved and preserved as the
-**inactive** `docs/agent-arena-workflow.yml.template`. It is separate from our
+**inactive** `docs/agent-arena-workflow.yml.template` (historical; it was later activated, see Current status). It is separate from our
 offline CI, requires OIDC/submission/provider secrets, and downloads a protected
 checker whose behavior could not be reviewed. Do not activate it until the
 official checks and possible provider usage are separately approved. The public
@@ -289,7 +293,8 @@ findings and storage limitations](docs/live_research.md).
 Live Mesh agent-JSON compatibility and Brave connectivity are still unverified;
 no live run was performed here. The dashboard remains the labeled offline
 fixture demo. GitHub Offline CI success was operator-reported, and its workflow
-is unchanged. The official hackathon checker remains inactive.
+is unchanged. The official hackathon checker remained inactive at that time
+(historical; it has since been activated, see Current status).
 
 ### Historical Phase 6 status
 
@@ -709,6 +714,35 @@ basic endpoint/auth/message envelope matches the official quickstart. The exact
 token parameter and strict response subset remain compatibility assumptions;
 see the Phase 5A audit. Model names are caller supplied; no model availability is
 assumed.
+
+### Optional Mesh SDK diagnostic
+
+The production pipeline and all five agents use only the validated, bounded HTTP
+adapter above (standard library; no LLM SDK). Separately, the optional `mesh-sdk`
+extra installs the OpenAI-compatible Python client (`openai`) for one explicit,
+opt-in compatibility diagnostic, `deepdive_ai.mesh_sdk`. It is never imported by the
+pipeline, the dashboard, the tests' research paths or CI, and nothing runs it
+automatically.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e '.[mesh-sdk]'
+.\.venv\Scripts\python.exe -m deepdive_ai.mesh_sdk            # preflight, no request
+.\.venv\Scripts\python.exe -m deepdive_ai.mesh_sdk --execute  # one small billable request
+```
+
+- It reads `MESH_API_KEY` from the process environment only (never from the private
+  credentials file) and talks only to `https://api.meshapi.ai/v1`, with no retries, a
+  16-token cap and a fixed prompt. `OPENAI_*` environment settings cannot change the
+  endpoint, organization or project.
+- With `--execute` it sends one non-streaming request and runs the same
+  routing-header, cache and model-identity classification as production on the SDK's
+  response, then prints only fixed fields: status, classification, rejection codes,
+  check results, finish reason and token counts. It prints no key, prompt or
+  completion, and a rejected or failed result exits non-zero.
+- Offline tests cover endpoint configuration, missing and invalid keys, cache and
+  routing rejection, sanitized errors and isolation from the pipeline, with network
+  connections blocked. No live SDK request has been made, so real-provider
+  compatibility of this path is unverified.
 
 The configurable base URL is constrained to the approved Mesh HTTPS origin and
 `/v1` path, with an optional trailing slash, so credentials cannot be redirected

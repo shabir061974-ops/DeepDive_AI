@@ -185,7 +185,7 @@ requirements remain documented in [live research](live_research.md).
 | Provider billing | Not verified; costs are upper-bound estimates from caps and operator-attested rates |
 | Independent semantic accuracy | Not demonstrated; model-verified only, no metrics claimed |
 | Historical blockers | Model-ID mismatch, missing fallback header (`f1728f28…`), Brave DNS timeouts and the attempts in the evidence table are historical |
-| Official hackathon checker | Exact inactive template retained; not activated |
+| Official hackathon checker | Activated at `0b3c253` (unchanged organizer workflow). First run [39809709272](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39809709272): 3/4 critical checks passed; the requirements check failed (no LLM client declared) and no result was recorded because no entry had been submitted. An optional [Mesh SDK diagnostic](../README.md#optional-mesh-sdk-diagnostic) was added in response; a new checker run is still needed and organizer acceptance is not established |
 
 Do not use fixture results as live research. A green offline test does not remove
 live-provider risk. Live preflight can validate configuration but cannot
@@ -288,8 +288,9 @@ accuracy claim, and provider billing has not been verified."
 **Engineering/close:** "The live runner uses Mesh for every LLM request and Brave
 for discovery, with public-source retrieval, strict JSON contracts, request
 budgets and private audit/report files. The offline tests, 483 passing in GitHub CI
-on this commit, cover the orchestration with mocked providers. The official Agent
-Arena checker has not yet been activated, and submission is still being completed."
+at the live-run commit, cover the orchestration with mocked providers. The official
+Agent Arena checker is active, and its latest result is not yet a pass; I make no
+claim of organizer acceptance."
 
 ## Completed evidence and outstanding submission items
 
@@ -310,8 +311,10 @@ The following remain open; completed baseline checks do not complete these items
   commit and its successful CI run after publication. Any documentation-only commit
   that follows `28339c1` needs its own successful Offline CI run before it is called
   verified. Do not create another repo.
-- [ ] Rehearse and record the demo; no verified YouTube URL is recorded here.
-  Upload/publish the video yourself and verify the intended audience can view it.
+- [x] Demo video published by the repository owner: <https://youtu.be/84Fua4MaO-0>.
+  This update did not re-review its content; before submitting, confirm that it
+  matches the script and labels above, that offline fixture and live segments are
+  clearly separated, and that the intended audience can view it.
 - [ ] Confirm the actual organizer submission portal, form fields, video duration,
   required attachments and eligibility rules. These were not independently
   retrieved during this session; do not infer them from an OIDC audience string.
@@ -323,21 +326,31 @@ The following remain open; completed baseline checks do not complete these items
 - [ ] If the organizer requires more live evidence than one completed run,
   separately authorize each further bounded run with its spend. Never claim a
   run not performed, and do not present one run as a reliability measure.
-- [ ] Review official checker activation separately. The supplied
-  [official workflow URL](https://careerapi-production.krishnaik.in/api/ci/hackathons/agent-arena-2026/workflow.yml)
-  was retrieved in Phase 8; the exact local template hash is
-  `f34c4aba59caa82bd992a3fb77b51c0c94d3d2c3551acb55f72ddaf4e6e91436`.
-  It requires OIDC permissions, `SUBMISSION_TOKEN`, `MESH_API_KEY`, downloads
-  protected code and reports to the organizer. It has not been activated, granted
-  secrets or executed. Do not enable it without separate approval and review of
-  checker behavior/possible spend. Confirm the current organizer requirement;
+- [x] Official checker activated (commit `0b3c253`). The workflow
+  [`.github/workflows/agent-arena-2026-checks.yml`](../.github/workflows/agent-arena-2026-checks.yml)
+  is an unchanged copy of the
+  [official workflow](https://careerapi-production.krishnaik.in/api/ci/hackathons/agent-arena-2026/workflow.yml)
+  (SHA-256 `f34c4aba59caa82bd992a3fb77b51c0c94d3d2c3551acb55f72ddaf4e6e91436`).
+  It runs on every push with OIDC, `SUBMISSION_TOKEN` and a dedicated,
+  spending-limited `MESH_API_KEY` repository secret, and downloads the organizer's
+  `checks.py` at run time, which cannot be reviewed here. Existing `live-demo`
+  environment secrets are unchanged.
+- [ ] **Checker still failing one critical check.** In
+  [run 39809709272](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39809709272)
+  the compile, Mesh-referenced and Mesh-key checks passed; the requirements check
+  failed because no LLM client was declared, and the organizer returned HTTP 403
+  ("You have not submitted your entry yet") when asked to record the result.
+  The optional `mesh-sdk` extra (`openai`) and its opt-in diagnostic were added in
+  response; the production pipeline still uses the bounded HTTP adapter. Whether
+  the checker accepts the optional extra, and whether the entry has been submitted
+  on the organizer's dashboard, must be confirmed from the next checker run.
   Offline CI alone is not evidence of official acceptance.
 - [ ] Review the final publication for secrets and private outputs. Preserve the
   exact developer attribution and offline labels. Choose licensing terms if
   redistribution rights are intended, after checking organizer requirements;
   no license has been invented or added.
 - [ ] Complete the organizer's submission manually; no form, email, outreach,
-  payment, checker activation or hosting deployment is authorized by this sprint.
+  payment or hosting deployment is authorized by this documentation.
 
 No guaranteed hackathon eligibility or submission completeness is claimed while
 these organizer, video and checker items remain unresolved.
@@ -361,7 +374,8 @@ Use the baseline evidence at the top for the latest documented checkpoint.
 - All 68 publishable files were scanned for common credential/private-key
   patterns and private runtime artifact paths: no suspected matches. Ignored
   artifacts and reports are excluded. The official template's exact SHA-256
-  was checked and it remains inactive. No actual key values were accessed.
+  was checked and it remained inactive at that time (it was activated later; see
+above). No actual key values were accessed.
 
 SPA: **APPROVED WITH NOTES** for the scoped offline/publication changes. The
 notes are the unchanged trusted-local-output/Windows ACL boundary, partial-file

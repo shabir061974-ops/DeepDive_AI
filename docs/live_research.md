@@ -277,7 +277,7 @@ uncertainty without reviewing exposure and authorizing another invocation.
 [`.github/workflows/live-demo.yml`](../.github/workflows/live-demo.yml) runs the
 same live CLI on a GitHub-hosted Windows runner so the repository owner can show
 a genuine five-agent run with a public, sanitized summary. It is separate from
-the official Agent Arena checker, which stays an unmodified, inactive template.
+the official Agent Arena checker, an unmodified copy of the organizer's workflow in a separate file.
 
 **Guarantees in the workflow:**
 
