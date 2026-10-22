@@ -185,7 +185,7 @@ requirements remain documented in [live research](live_research.md).
 | Provider billing | Not verified; costs are upper-bound estimates from caps and operator-attested rates |
 | Independent semantic accuracy | Not demonstrated; model-verified only, no metrics claimed |
 | Historical blockers | Model-ID mismatch, missing fallback header (`f1728f28…`), Brave DNS timeouts and the attempts in the evidence table are historical |
-| Official hackathon checker | Activated at `0b3c253` (unchanged organizer workflow). First run [39809709272](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39809709272): 3/4 critical checks passed; the requirements check failed (no LLM client declared) and no result was recorded because no entry had been submitted. An optional [Mesh SDK diagnostic](../README.md#optional-mesh-sdk-diagnostic) was added in response; a new checker run is still needed and organizer acceptance is not established |
+| Official hackathon checker | Activated at `0b3c253` (unchanged organizer workflow). First run [39809709272](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39809709272): 3/4 critical checks passed (no LLM client declared). After the optional [Mesh SDK diagnostic](../README.md#optional-mesh-sdk-diagnostic) was added, [run 39816805767](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39816805767) passed **all 4 critical checks**. Neither result was recorded by the organizer because no entry had been submitted. The entry has now been submitted and the organizer is awaiting a recorded check; recording and acceptance are not yet confirmed |
 
 Do not use fixture results as live research. A green offline test does not remove
 live-provider risk. Live preflight can validate configuration but cannot
@@ -289,8 +289,8 @@ accuracy claim, and provider billing has not been verified."
 for discovery, with public-source retrieval, strict JSON contracts, request
 budgets and private audit/report files. The offline tests, 483 passing in GitHub CI
 at the live-run commit, cover the orchestration with mocked providers. The official
-Agent Arena checker is active, and its latest result is not yet a pass; I make no
-claim of organizer acceptance."
+Agent Arena checker is active and its four critical checks pass on GitHub; the
+organizer has not yet confirmed a recorded result, so I make no claim of acceptance."
 
 ## Completed evidence and outstanding submission items
 
@@ -335,16 +335,23 @@ The following remain open; completed baseline checks do not complete these items
   spending-limited `MESH_API_KEY` repository secret, and downloads the organizer's
   `checks.py` at run time, which cannot be reviewed here. Existing `live-demo`
   environment secrets are unchanged.
-- [ ] **Checker still failing one critical check.** In
+- [x] **All four critical checks passed on GitHub Actions.** In
   [run 39809709272](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39809709272)
-  the compile, Mesh-referenced and Mesh-key checks passed; the requirements check
-  failed because no LLM client was declared, and the organizer returned HTTP 403
-  ("You have not submitted your entry yet") when asked to record the result.
-  The optional `mesh-sdk` extra (`openai`) and its opt-in diagnostic were added in
-  response; the production pipeline still uses the bounded HTTP adapter. Whether
-  the checker accepts the optional extra, and whether the entry has been submitted
-  on the organizer's dashboard, must be confirmed from the next checker run.
-  Offline CI alone is not evidence of official acceptance.
+  the requirements check failed because no LLM client was declared. The optional
+  `mesh-sdk` extra (`openai`) and its opt-in diagnostic were added in response; the
+  production pipeline still uses the bounded HTTP adapter. In
+  [run 39816805767](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39816805767)
+  (commit `1e39c18`) the compile, requirements, Mesh-referenced and Mesh-key checks
+  all passed, and the latest Offline CI
+  ([run 39816805642](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39816805642))
+  passed 495 tests. The organizer returned HTTP 403 ("You have not submitted your
+  entry yet") when asked to record that result, so it was not recorded.
+- [x] The entry has been submitted on the organizer's dashboard (repository accepted
+  and GitHub URL locked, as reported by the repository owner).
+- [ ] **Organizer recording not yet confirmed.** The dashboard status is "Waiting
+  for checks"; the next push triggers a checker run that the organizer can record.
+  Confirm the recorded result on the dashboard. Offline CI alone is not evidence of
+  official acceptance.
 - [ ] Review the final publication for secrets and private outputs. Preserve the
   exact developer attribution and offline labels. Choose licensing terms if
   redistribution rights are intended, after checking organizer requirements;
