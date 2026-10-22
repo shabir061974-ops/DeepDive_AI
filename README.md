@@ -8,29 +8,30 @@ Developed by Chabir Ahamad Abusali
 
 ## Current status
 
-Latest verified code checkpoint: `ee50eb28a2ce8769664a86f13ab5bad26458181a` on
+Latest verified code checkpoint: `28339c11289c88be3bc448ab0578a3819dde9b06` on
 `master`. This table supersedes the historical phase records below.
 
 | Area | Evidence at this checkpoint | Status |
 | --- | --- | --- |
 | Offline workflow | Real coordinator and five agents with scripted Mesh responses and local retrieval fixtures | Verified offline |
-| Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only; the dashboard remains a labeled fixture demo |
-| Automated verification | 385 offline Python tests passed at `ee50eb2`; six browser scenarios passed in CI | Verified |
-| GitHub Offline CI | [Successful run 39494702168](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39494702168) for `ee50eb2` | Verified |
-| Complete live research | **One completed live five-agent run** on October 20, 2026: run `56943dceac174beebd53e9b10573344c`, report status `verified`, 2 of 2 claims supported with exact quotes from a retrieved MDN page | Passed once; see [live run evidence](docs/submission_readiness.md#live-run-evidence) |
-| Live request use | 4 Mesh, 1 Brave and 1 source request (limits 7/2/4); 25.8 s wall time (limit 120 s); `google/gemini-2.5-flash` | Within limits; DoH enabled for that session |
-| Live cost | At most about USD 0.02, an upper bound from configured caps and operator-approved rates | Estimate only; actual billing not verified (`unknown_may_be_billable`) |
-| Live reliability and accuracy | Five earlier October 20 attempts (and an older `f1728f28…` attempt) failed closed at different stages before the fixes listed in the evidence section | **Not established**; one success is not a reliability or accuracy measure |
+| Dashboard | Six fixed scenarios, citations, verification ledger, audit events, Markdown export and desktop/mobile checks | Verified offline only; the dashboard remains a labeled fixture demo and is **not** live research |
+| Automated verification | 483 offline Python tests passed at `28339c1`; six browser scenarios passed in CI | Verified |
+| GitHub Offline CI | [Successful run 39663310116](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39663310116) for `28339c1` | Verified |
+| Genuine live research (GitHub) | [Live Research Demo run 39768843859](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39768843859), October 22, 2026, commit `28339c1`: the run and its job finished `success`. Operator-reported from the run's Summary page: all five agents completed, 2 claims supported with citations to MDN's HTTP 304 documentation, Mesh 4 / Brave 1 / source 1 requests | Passed once; see [GitHub live run evidence](docs/submission_readiness.md#github-live-run-evidence) |
+| Earlier live research (local) | One completed local run on October 20, 2026 at `ee50eb2` (`56943dceac174beebd53e9b10573344c`, HTTP 405/501 question) | Passed once; see [live run evidence](docs/submission_readiness.md#live-run-evidence) |
+| Live cost | Each run is bounded at about USD 0.04 (GitHub profile) by configured caps and operator-approved rates | Estimate only; actual provider billing **not verified** |
+| Live reliability and accuracy | Nine GitHub live-demo runs on October 21, 2026 (all before `28339c1`), five earlier local attempts and an older `f1728f28…` attempt failed closed before these successes | **Not established**; two successful runs are not a reliability or accuracy measure |
 | Official checker and submission | Official Agent Arena checker has not yet been activated; inactive template retained | Outstanding; Offline CI does not establish organizer acceptance |
 
-The completed run passed every existing safeguard unchanged: strict model
+The completed runs passed every existing safeguard unchanged: strict model
 identity and `X-Mesh-Routing-Fallback: false` routing checks, rejection of
 unverified cache hits, strict agent JSON and schemas, evidence-ID and exact-quote
-verification, TLS, SSRF and public-IP pinning. Its claims were judged supported
+verification, TLS, SSRF and public-IP pinning. Claims were judged supported
 by the live Mesh Verifier and checked programmatically as exact excerpt quotes;
 they were not independently reviewed by a person. Earlier blockers (slow server
-DNS, a Mesh cache hit, fenced agent JSON, Planner task count, claim length and a
+DNS, Mesh cache hits, fenced agent JSON, Planner task count, claim length and a
 DoH timeout) and their fixes are recorded in the [live run evidence](docs/submission_readiness.md#live-run-evidence).
+The failed runs remain as historical evidence and are not hidden.
 See also the [submission checklist and video script](docs/submission_readiness.md),
 [live runner](docs/live_research.md) and [identity/routing policy](docs/mesh_model_identity.md).
 
@@ -94,8 +95,8 @@ assessments**, not live semantic accuracy, independent source truth, search
 quality, research completeness or organizer-checker acceptance. The scripted
 verifier deliberately proposes positive verdicts; actual production vetoes must
 reject contradictory or insufficient assessments. This cannot detect a real
-model incorrectly calling an unrelated excerpt supportive. One complete live
-run has since passed (see [Current status](#current-status)); it does not measure
+model incorrectly calling an unrelated excerpt supportive. Complete live
+runs have since passed (see [Current status](#current-status)); they do not measure
 live reliability or semantic accuracy.
 
 | Case | Final supported/unsupported/insufficient claims | Accepted citations traceable | Unsafe acceptances | Contradiction safeguard | Retries observed/expected |

@@ -4,16 +4,72 @@ Developed by Chabir Ahamad Abusali.
 
 ## Current submission evidence
 
-Latest verified code checkpoint is `ee50eb28a2ce8769664a86f13ab5bad26458181a` on
-`master`. [Offline CI run 39494702168](https://github.com/shabir061974-ops/DeepDive_AI/actions/runs/39494702168)
-passed for that checkpoint: **385 offline Python tests**, compilation, JavaScript
-syntax checks and the six-scenario browser smoke test. From that checkpoint, **one
-complete live five-agent research run passed** with report status `verified`
-(details below). The six separate scripted self-evaluation cases measure
-deterministic offline correctness, not live research performance; their recorded
-results remain unchanged.
+Latest verified code checkpoint is `28339c11289c88be3bc448ab0578a3819dde9b06` on
+`master`. [Offline CI run 39663310116](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39663310116)
+passed for that checkpoint: **483 offline Python tests**, compilation, JavaScript
+syntax checks and the six-scenario browser smoke test. From that checkpoint, a
+GitHub-hosted live five-agent research run succeeded on October 22, 2026
+([GitHub live run evidence](#github-live-run-evidence)), after a separate local live
+run succeeded on October 20, 2026 ([earlier local run](#live-run-evidence)). The
+six scripted self-evaluation cases and the dashboard measure deterministic offline
+correctness, not live research performance; their recorded results remain unchanged.
+
+## GitHub live run evidence
+
+On October 22, 2026 the repository owner manually dispatched the
+**Live Research Demo** workflow on `master`.
+
+| Item | Result |
+| --- | --- |
+| Public run | [Run 39768843859](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39768843859) |
+| Commit | `28339c11289c88be3bc448ab0578a3819dde9b06` (confirmed from the run record) |
+| Trigger and time | `workflow_dispatch`, created 2026-10-22 11:12 UTC; the job ran about 42 s |
+| Workflow result | Run and job concluded `success`; every step, including the preflight and the single live execution step, concluded `success` |
+| Question | "According to MDN, what does the HTTP 304 Not Modified status code indicate?" (a new question; none of the earlier GitHub runs used it) |
+| Inputs | `confirm_spend` yes; Mesh USD 0.30 / 2.50 per million input/output tokens and Brave USD 0.005 per request (operator-attested); DNS resolver `doh`; model fixed `google/gemini-2.5-flash` |
+| Agents, claims, requests | **Operator-reported from the run's Summary page:** all five agents completed; two claims supported, citing MDN's HTTP 304 documentation; Mesh 4, Brave 1 and source 1 requests (limits 7/2/4) |
+| Cost | Bounded at about USD 0.04 by the configured caps and approved rates. Upper-bound estimate only; **actual provider billing has not been verified** |
+
+The workflow result, commit, trigger, question and inputs above were read from the
+GitHub run record and logs. The Summary page content (agents, claims, request
+counts) is not exposed through the GitHub API or logs, so it was not independently
+re-read here; re-open the run's Summary page before quoting those details in the
+video or submission. The summary is public and sanitized: no keys, prompts,
+rationales or source excerpts.
+
+**Limitations.** This is one successful GitHub run, not a reliability measure.
+Semantic support was judged by the live Mesh Verifier and quotes were checked
+programmatically; no person independently reviewed the claims, and no accuracy
+metric is claimed. Earlier failures are retained below as historical evidence.
+
+### Earlier GitHub live-demo runs (all failed, all before `28339c1`)
+
+These nine October 21, 2026 runs on `master` are retained unchanged. The workflow
+failed each at the live execution step (job exit code 1). Their sanitized summaries
+are not retrievable through the API, so the table assigns no causes beyond what the
+operator recorded.
+
+| Run | Commit | Question topic | Result |
+| --- | --- | --- | --- |
+| `39571607693` | `3a0a273` | HTTP 408 vs 504 | failed |
+| `39579899953` | `3a0a273` | HTTP 408 vs 504 (repeat) | failed |
+| `39585280008` | `9fe4d5c` | HTTP 401 vs 403 | failed |
+| `39645591591` | `240c2ef` | HTTP 429 vs 503 | failed |
+| `39648805710` | `253deb1` | HTTP 410 vs 404 | failed |
+| `39651185342` | `4cf8315` | HTTP 412 vs 428 | failed |
+| `39657256105` | `addd997` | HTTP 415 vs 406 | failed |
+| `39660329362` | `4b63da3` | HTTP 401 vs 403 (repeat) | failed |
+| `39662105351` | `98557ff` | HTTP 415 vs 406 (repeat) | failed; operator-reported `response_validation` with Mesh classification `cached_response` (`fallback_missing`, `cached_response_unverified`); Planner failed after one Mesh request |
+
+Three questions were reused. Reuse is consistent with the Mesh cache-hit rejection
+documented in [mesh_model_identity.md](mesh_model_identity.md), but the causes of
+the other failures are unconfirmed here. The successful run used a new question and
+no validation rule was changed: cache hits and missing routing headers are still
+rejected.
 
 ## Live run evidence
+
+This section records the earlier **local** run. The GitHub run is above.
 
 On October 20, 2026 (20:52 UTC) the operator authorized one bounded live run of
 `python -m deepdive_ai.live --execute` at `ee50eb2`, with
@@ -122,10 +178,11 @@ requirements remain documented in [live research](live_research.md).
 | --- | --- |
 | Local dashboard, six scenarios, citations, contradictions, retry/audit views | Automated offline/browser checks |
 | Full real-adapter five-agent orchestration | Mocked HTTP integration tests |
-| Complete live five-agent research | One run passed: `56943dce…`, report `verified`, 2/2 claims supported with MDN citations ([evidence](#live-run-evidence)) |
-| Live Mesh routing, model identity and agent JSON contracts | Passed on all four Mesh responses in that run under unchanged strict checks |
-| Live Brave discovery and source retrieval | Passed in that run, with DNS-over-HTTPS enabled for the session |
-| Live reliability | Not established; five earlier October 20 attempts and the older `f1728f28…` attempt failed closed at different stages |
+| Complete live five-agent research | Two runs passed: GitHub run `39768843859` on October 22, 2026 at `28339c1` (workflow success; agents, claims and request counts operator-reported from its Summary page; [evidence](#github-live-run-evidence)), and local run `56943dce…` on October 20, 2026, report `verified`, 2/2 claims supported with MDN citations ([evidence](#live-run-evidence)) |
+| Live Mesh routing, model identity and agent JSON contracts | Passed on all four Mesh responses in the local run under unchanged strict checks; the GitHub run passed the same unchanged checks (its workflow succeeded) |
+| Live Brave discovery and source retrieval | Passed in both runs, with DNS-over-HTTPS enabled |
+| Live reliability | Not established; nine October 21 GitHub runs, five earlier October 20 local attempts and the older `f1728f28…` attempt failed closed at different stages |
+| Provider billing | Not verified; costs are upper-bound estimates from caps and operator-attested rates |
 | Independent semantic accuracy | Not demonstrated; model-verified only, no metrics claimed |
 | Historical blockers | Model-ID mismatch, missing fallback header (`f1728f28…`), Brave DNS timeouts and the attempts in the evidence table are historical |
 | Official hackathon checker | Exact inactive template retained; not activated |
@@ -165,12 +222,32 @@ a hard dollar ceiling on gateway work.
 - Export Markdown and confirm it retains the offline notice and citations.
 - Show a passing automated test/CI result for the exact recorded commit, while
   explaining that provider responses in integration tests are mocked.
-- If mentioning live results, state exactly one completed live run with two
-  model-verified claims, and that reliability and accuracy are not established.
-  Do not display private report files or credentials. Do not execute
-  the live runner during recording without separate approval. If you started a
-  disposable recording server, stop only that instance afterward; leave an
-  existing dashboard untouched.
+- If mentioning live results, point to the public GitHub run page (see the
+  screen-by-screen checklist below), state that it is one successful run with
+  claims judged by the model Verifier, and that reliability and accuracy are not
+  established. Do not display private report files or credentials. Do not execute
+  the live runner or dispatch the workflow during recording without separate
+  approval. If you started a disposable recording server, stop only that instance
+  afterward; leave an existing dashboard untouched.
+
+## Screen-by-screen recording checklist
+
+Target about three minutes. Record only what is listed; every screen is either the
+labeled offline dashboard or a public GitHub page.
+
+| # | Screen | Say / show | Must not |
+| --- | --- | --- | --- |
+| 1 | Dashboard home, `http://127.0.0.1:8000/` | Name, project, five agents; point to the **OFFLINE FIXTURE DEMO — NO LIVE RESEARCH** label and footer attribution | Call the dashboard live research |
+| 2 | Supported evidence scenario | Agent sequence, accepted claim, inline citation, provenance (authored fixture source) | Present fixture citations as web findings |
+| 3 | Conflicting sources scenario | Contradiction kept, uncertain claim excluded, audit trail | Hide a needs-review result |
+| 4 | Evidence gap scenario and Markdown export | One bounded research-again loop; exported file keeps the offline notice | Invent accuracy scores |
+| 5 | Public GitHub run page, [run 39768843859](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39768843859) | Say: "This is a separate, genuine live run on GitHub, not the dashboard." Show the green result, commit `28339c1`, and the Summary page (read it first and say only what it shows: five agents, two claims with citations, request counts) | Open secrets, environment settings or private files; claim billing is verified |
+| 6 | GitHub Actions list for the workflow | Briefly show that earlier runs failed closed and are kept | Claim reliability |
+| 7 | Offline CI run [39663310116](https://github.com/shabir61974-ops/DeepDive_AI/actions/runs/39663310116) | 483 offline tests passed on `28339c1`; provider calls in those tests are mocked | Imply the CI ran live providers |
+| 8 | Close | Limits and next steps; developer name | Say the official checker or submission is complete |
+
+Before recording: confirm the live run's Summary page still loads and matches the
+statements in the script; close terminals, `.env` files and provider dashboards.
 
 ## Concise YouTube demonstration script
 
@@ -178,8 +255,9 @@ Suggested length: about three minutes; this is an internal rehearsal suggestion,
 not a verified organizer duration requirement.
 
 **Opening:** "I'm Chabir Ahamad Abusali. DeepDive AI is a self-verifying research
-analyst with five agents and traceable evidence. This recording uses the
-explicitly labeled offline fixture demo; it performs no live research."
+analyst with five agents and traceable evidence. The dashboard you'll see first is
+an explicitly labeled offline fixture demo; it performs no live research. Later I'll
+show a separate, genuine live run on GitHub."
 
 **Supported scenario:** "The planner creates tasks, the researcher gathers
 evidence, the drafter proposes claims, the verifier checks them, and the
@@ -198,37 +276,50 @@ loop. The exported Markdown retains citations and the offline demonstration
 notice. We do not invent accuracy scores or claim that these fixtures are live
 web findings."
 
+**Live run (GitHub page):** "This is not the dashboard. It is a real run of the
+live workflow on GitHub, owner-approved and spend-capped. The question was about
+what HTTP 304 Not Modified means, answered from MDN. [Read the Summary page first
+and state only what it shows:] all five agents completed, two claims were
+supported with citations to MDN, using four Mesh requests, one Brave search and one
+source fetch. Many earlier runs failed closed, and they are still listed. This is
+one successful run, judged by the model verifier; I make no reliability or
+accuracy claim, and provider billing has not been verified."
+
 **Engineering/close:** "The live runner uses Mesh for every LLM request and Brave
 for discovery, with public-source retrieval, strict JSON contracts, request
-budgets and private persistent audit/report files. In one authorized live run,
-all five agents completed against a real MDN page: two claims about HTTP 405 and
-501 were verified with exact quotes and citations, using four Mesh requests and
-one Brave search in about 26 seconds. Earlier attempts failed safely, and each
-cause was fixed without weakening a check. One run is not a reliability or
-accuracy measure, and the official Agent Arena checker has not yet been
-activated. Offline integration tests and GitHub CI cover the orchestration with
-mocked providers."
+budgets and private audit/report files. The offline tests, 483 passing in GitHub CI
+on this commit, cover the orchestration with mocked providers. The official Agent
+Arena checker has not yet been activated, and submission is still being completed."
 
 ## Completed evidence and outstanding submission items
 
 - [x] Existing public repository identified; no new repository is needed.
-- [x] Checkpoint `ee50eb2` has the successful Offline CI evidence linked above.
-- [x] One bounded, authorized live five-agent run completed with report status
-  `verified` (run `56943dce…`); see [live run evidence](#live-run-evidence).
+- [x] Checkpoint `28339c1` has the successful Offline CI evidence linked above
+  (483 tests).
+- [x] A bounded, authorized local live run completed with report status `verified`
+  (run `56943dce…`); see [live run evidence](#live-run-evidence).
+- [x] A GitHub-hosted live run succeeded on October 22, 2026 (run `39768843859`,
+  commit `28339c1`); see [GitHub live run evidence](#github-live-run-evidence).
+  Its Summary-page details are operator-reported and should be re-read before use.
 - [x] Recorded offline workflow and six browser scenarios cover the demo behavior.
 - [x] Developer attribution and explicit offline labeling are present.
 
 The following remain open; completed baseline checks do not complete these items:
 
 - [ ] Use the existing public repository URL above; record the final verified
-  commit and its successful CI run after publication. Do not create another repo.
+  commit and its successful CI run after publication. Any documentation-only commit
+  that follows `28339c1` needs its own successful Offline CI run before it is called
+  verified. Do not create another repo.
 - [ ] Rehearse and record the demo; no verified YouTube URL is recorded here.
   Upload/publish the video yourself and verify the intended audience can view it.
 - [ ] Confirm the actual organizer submission portal, form fields, video duration,
   required attachments and eligibility rules. These were not independently
   retrieved during this session; do not infer them from an OIDC audience string.
-- [ ] Confirm the operator-supplied deadline: October 20, 2026 at 8:30 PM Kuwait
-  time. This document records the supplied deadline, not a newly verified rule.
+- [ ] **Outdated:** the operator-supplied deadline recorded earlier was October 20,
+  2026 at 8:30 PM Kuwait time, which has already passed. Do not assume the
+  submission is still open: confirm the current deadline, any extension and whether
+  late entries are accepted directly with the organizer. This document does not
+  verify any deadline.
 - [ ] If the organizer requires more live evidence than one completed run,
   separately authorize each further bounded run with its spend. Never claim a
   run not performed, and do not present one run as a reliability measure.
